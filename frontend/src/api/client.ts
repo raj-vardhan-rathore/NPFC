@@ -1,5 +1,8 @@
 export type ApiInit = RequestInit & { token?: string; retries?: number };
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+export const getApiBaseUrl = () => API_BASE_URL;
+
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const CACHE_TTL_MS = 60_000;
 const cachedGet = new Map<string, { savedAt: number; value: unknown }>();
@@ -36,7 +39,8 @@ export async function apiRequest<T>(path: string, init: ApiInit = {}): Promise<T
 async function send<T>(path: string, init: ApiInit): Promise<T> {
   const { token, headers, body, retries: _retries, ...requestInit } = init;
   const isFormData = body instanceof FormData;
-  const response = await fetch(path, {
+  const url = `${API_BASE_URL}${path}`;
+  const response = await fetch(url, {
     ...requestInit,
     body,
     headers: {

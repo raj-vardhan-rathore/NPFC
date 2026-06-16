@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, getApiBaseUrl } from "./client";
 
 export type ProfitLossFilters = Record<string, string | number | undefined>;
 
@@ -58,4 +58,4 @@ export const getProfitLossRevenue = (token?: string, filters?: ProfitLossFilters
 export const getProfitLossCashflow = (token?: string, filters?: ProfitLossFilters) => apiRequest<any>(path("cashflow", filters), { token });
 export const getProfitLossReceivables = (token?: string, filters?: ProfitLossFilters) => apiRequest<any>(path("receivables", filters), { token });
 export const generateProfitLossStatement = (token: string | undefined, body: ProfitLossFilters & { reportType: string }) => apiRequest<any>("/api/profit-loss/generate-statement", { token, method: "POST", body: JSON.stringify(body) });
-export const profitLossExportUrl = (filters: ProfitLossFilters, format: "pdf" | "excel") => `/api/profit-loss/export/${format}?${query(filters)}`;
+export const profitLossExportUrl = (filters: ProfitLossFilters, format: "pdf" | "excel") => `${getApiBaseUrl()}/api/profit-loss/export/${format}?${query(filters)}`;

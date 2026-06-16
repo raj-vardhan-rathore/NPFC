@@ -1,5 +1,5 @@
 import type { Payment } from "../types";
-import { apiRequest } from "./client";
+import { apiRequest, getApiBaseUrl } from "./client";
 
 export type PaymentPayload = {
   direction?: "Incoming" | "Outgoing";
@@ -38,4 +38,4 @@ export const listPayments = (token?: string, filters?: PaymentFilters) => apiReq
 export const createPayment = (token: string | undefined, body: PaymentPayload) => apiRequest("/api/payments", { token, method: "POST", body: JSON.stringify(body) });
 export const updatePayment = (token: string | undefined, id: string, body: Partial<PaymentPayload>) => apiRequest(`/api/payments/${id}`, { token, method: "PATCH", body: JSON.stringify(body) });
 export const deletePayment = (token: string | undefined, id: string) => apiRequest<void>(`/api/payments/${id}`, { token, method: "DELETE" });
-export const exportPaymentsUrl = (filters: PaymentFilters, format: "csv" | "excel" | "pdf") => `/api/payments/export?${query({ ...filters, format })}`;
+export const exportPaymentsUrl = (filters: PaymentFilters, format: "csv" | "excel" | "pdf") => `${getApiBaseUrl()}/api/payments/export?${query({ ...filters, format })}`;

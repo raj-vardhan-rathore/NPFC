@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, getApiBaseUrl } from "./client";
 
 export type ReportCategory = "financial" | "trips" | "vehicles" | "drivers" | "maintenance" | "bilty" | "compliance";
 export type ReportFilters = Record<string, string | number | undefined>;
@@ -43,7 +43,7 @@ export const getReportCategory = (token: string | undefined, category: ReportCat
   apiRequest<ReportPayload>(withQuery(`/api/reports/${category}`, filters), { token });
 
 export async function exportReport(token: string | undefined, category: ReportCategory, filters: ReportFilters, format: "pdf" | "excel") {
-  const response = await fetch(`/api/reports/export/${format}`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/reports/export/${format}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

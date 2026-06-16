@@ -4,6 +4,7 @@ import { Controller, useForm } from "react-hook-form";
 import { MapContainer, Polyline, Popup, TileLayer } from "react-leaflet";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, cn, money } from "./lib";
+import { getApiBaseUrl } from "./api/client";
 import { useSession } from "./store";
 import { login as loginApi } from "./api/auth";
 import type { Bilty, Customer, CustomerLocation, DashboardData, Driver, Invoice, Payment, Trip, Vehicle } from "./types";
@@ -2548,7 +2549,7 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
 
   const exportReport = async (format: "pdf" | "excel") => {
     const params = new URLSearchParams(Object.entries({ ...filters, format }).filter(([, value]) => value && value !== "All"));
-    const response = await fetch(`/api/expenses/export?${params.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const response = await fetch(`${getApiBaseUrl()}/api/expenses/export?${params.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     if (!response.ok) throw new Error("Export failed.");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);

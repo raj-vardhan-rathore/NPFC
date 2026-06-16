@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, getApiBaseUrl } from "./client";
 
 export type MaintenanceStatus = "Scheduled" | "In Progress" | "Completed" | "Cancelled";
 
@@ -116,4 +116,4 @@ export const updateMaintenance = (token: string | undefined, id: string, body: P
 export const deleteMaintenance = (token: string | undefined, id: string) => apiRequest<void>(`/api/maintenance/${id}`, { token, method: "DELETE" });
 export const createTyre = (token: string | undefined, body: Omit<TyreRecord, "id" | "vehicleNumber">) => apiRequest<TyreRecord>("/api/maintenance/tyres", { token, method: "POST", body: JSON.stringify(body) });
 export const createAccident = (token: string | undefined, body: Omit<AccidentRecord, "id" | "vehicleNumber" | "driverName">) => apiRequest<AccidentRecord>("/api/maintenance/accidents", { token, method: "POST", body: JSON.stringify(body) });
-export const maintenanceExportUrl = (format: "excel" | "pdf", filters: Record<string, string>) => `/api/maintenance/export?${new URLSearchParams({ ...filters, format }).toString()}`;
+export const maintenanceExportUrl = (format: "excel" | "pdf", filters: Record<string, string>) => `${getApiBaseUrl()}/api/maintenance/export?${new URLSearchParams({ ...filters, format }).toString()}`;
