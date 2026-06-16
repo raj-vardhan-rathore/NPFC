@@ -45,8 +45,8 @@ app.use((_req, res, next) => {
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "NPFC Logistics SaaS API" });
 });
+app.post("/api/auth/login", validate(authLoginSchema), login);
 const api = express.Router();
-api.post("/auth/login", validate(authLoginSchema), login);
 api.use(requireAuth);
 api.get("/dashboard", dashboard);
 api.get("/backups", requireRole("Admin"), backupStatus);

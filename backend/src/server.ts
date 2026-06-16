@@ -69,9 +69,9 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "NPFC Logistics SaaS API" });
 });
 
-const api = express.Router();
+app.post("/api/auth/login", validate(authLoginSchema), login);
 
-api.post("/auth/login", validate(authLoginSchema), login);
+const api = express.Router();
 
 api.use(requireAuth);
 api.get("/dashboard", dashboard);
