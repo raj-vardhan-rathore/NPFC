@@ -1,0 +1,255 @@
+<!doctype html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: A4 portrait; margin: 8mm; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; line-height: 1.15; }
+        .invoice-page {
+          width: 194mm;
+          height: 281mm;
+          max-height: 281mm;
+          margin: 0 auto;
+          border: 1px solid #000000;
+          display: grid;
+          grid-template-rows: 100px 135px 135px 60px 115px 75px 175px 95px 90px 60px 22px;
+          overflow: hidden;
+          page-break-after: avoid;
+          page-break-inside: avoid;
+        }
+        .header { display: grid; grid-template-columns: 32% 48% 20%; border-bottom: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .brand { padding: 12px 8px 0 14px; min-width: 0; overflow: hidden; }
+        .logo { color: #062b66; font-size: 18px; font-weight: 700; line-height: 1; }
+        .brand-name { margin-top: 4px; font-size: 18px; font-weight: 700; line-height: 1.05; }
+        .tagline { margin-top: 3px; font-size: 9px; font-style: italic; }
+        .title { display: grid; align-content: center; justify-items: center; text-align: center; min-width: 0; }
+        .title h1 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.05; }
+        .title div { margin-top: 5px; font-size: 10px; }
+        .qr-area { padding: 8px 10px 0 0; text-align: right; min-width: 0; overflow: hidden; }
+        .qr-label { padding-right: 10px; font-size: 9px; }
+        .qr { width: 64px; height: 64px; margin: 3px 0 0 auto; border: 1px solid #000000; padding: 5px; display: grid; grid-template-columns: repeat(21, 1fr); grid-template-rows: repeat(21, 1fr); }
+        .qr span { background: #ffffff; }
+        .qr .on { background: #000000; }
+        .company-meta { display: grid; grid-template-columns: 48% 52%; border-bottom: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .company-address, .invoice-meta { padding: 12px 14px 0 14px; min-width: 0; overflow: hidden; }
+        .company-address { border-right: 1px solid #000000; }
+        .blue-name { color: #062b66; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+        .line { height: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .kv { height: 12px; display: grid; grid-template-columns: 82px 8px minmax(0, 1fr); align-items: start; min-width: 0; overflow: hidden; }
+        .invoice-meta .kv { grid-template-columns: 92px 8px minmax(0, 1fr); }
+        .v, .td, .remarks-text {
+          min-width: 0;
+          word-break: break-word;
+          overflow-wrap: break-word;
+          overflow: hidden;
+        }
+        .v {
+          display: -webkit-box;
+          -webkit-line-clamp: 1;
+          -webkit-box-orient: vertical;
+        }
+        .address-row { height: 32px; }
+        .address-row .v {
+          -webkit-line-clamp: 3;
+        }
+        .section-title, .box-title {
+          height: 16px;
+          display: grid;
+          align-items: center;
+          border-bottom: 1px solid #000000;
+          background: #eef3fb;
+          color: #071b46;
+          font-size: 11px;
+          font-weight: 600;
+        }
+        .section-title { justify-items: center; color: #000000; }
+        .box-title { padding-left: 8px; }
+        .parties { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #000000; min-height: 0; }
+        .party:first-child { border-right: 1px solid #000000; }
+        .party { min-width: 0; overflow: hidden; }
+        .party .kv { margin: 5px 12px 0 12px; grid-template-columns: 88px 8px minmax(0, 1fr); }
+        .payee { border-bottom: 1px solid #000000; min-height: 0; }
+        .payee-grid { padding: 7px 12px 0 12px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
+        .payee-grid .kv { grid-template-columns: 84px 8px minmax(0, 1fr); }
+        .trip { margin: 8px 8px 0 8px; border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .trip-grid { display: grid; grid-template-columns: 15% 16% 17% 22% 14% 16%; }
+        .loc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #000000; }
+        .timing { margin: 8px 8px 0 8px; border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .timing-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+        .th, .td { height: 18px; display: block; line-height: 14px; text-align: center; padding: 2px 3px; border-right: 1px solid #000000; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; word-break: normal; overflow-wrap: normal; }
+        .th { background: #eef3fb; font-weight: 600; border-bottom: 1px solid #000000; }
+        .th:last-child, .td:last-child { border-right: 0; }
+        .trip .section-title, .timing .section-title { height: 16px; }
+        .trip .th, .trip .td, .timing .th, .timing .td { height: 18px; padding: 2px 3px; }
+        .charges { margin: 8px 8px 0 8px; border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .charges-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .charges-table th, .charges-table td { border: 1px solid #000000; padding: 2px 6px; height: 22px; max-height: 22px; font-size: 9px; overflow: hidden; word-break: break-word; overflow-wrap: break-word; }
+        .charges-table th { background: #eef3fb; font-weight: 600; text-align: center; font-size: 11px; }
+        .charges-table th:first-child, .charges-table td:first-child { border-left: 0; }
+        .charges-table th:last-child, .charges-table td:last-child { border-right: 0; }
+        .charges-table tr:last-child td { border-bottom: 0; }
+        .amount { text-align: right; white-space: nowrap; }
+        .payment-summary { margin: 8px 8px 0 8px; border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .summary-row { height: 17px; display: grid; grid-template-columns: 1fr 18px 120px; align-items: center; padding: 0 12px; border-bottom: 1px solid #000000; font-size: 9px; }
+        .summary-row:last-child { border-bottom: 0; }
+        .summary-value { text-align: right; font-weight: 800; }
+        .red { color: #d40000; }
+        .green { color: #008a2e; }
+        .words { height: 16px; display: grid; grid-template-columns: auto 14px minmax(0, 1fr); align-items: center; padding: 0 12px; font-size: 9px; overflow: hidden; }
+        .words strong { font-style: italic; }
+        .bottom { margin: 8px 8px 0 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-height: 0; overflow: hidden; }
+        .small-box { border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .small-box .kv { margin: 5px 8px 0 8px; grid-template-columns: 84px 8px minmax(0, 1fr); height: 12px; }
+        .remarks-sign { margin: 8px 8px 0 8px; display: grid; grid-template-columns: 1fr 210px; gap: 8px; min-height: 0; overflow: hidden; }
+        .remarks { border: 1px solid #000000; min-height: 0; overflow: hidden; }
+        .remarks-text { padding: 5px 8px; height: 31px; white-space: pre-wrap; font-size: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+        .sign { text-align: center; padding-top: 15px; font-size: 9px; overflow: hidden; }
+        .sign strong, .sign span { display: block; }
+        .footer { display: grid; align-items: center; justify-items: center; font-style: italic; font-weight: 700; font-size: 9px; overflow: hidden; }
+      </style>
+    </head>
+    <body>
+      <main class="invoice-page">
+        <section class="header">
+          <div class="brand">
+            <div class="logo">NPFC</div>
+            <div class="brand-name">NPFC LOGISTICS</div>
+            <div class="tagline">Freight &amp; Transportation Services</div>
+          </div>
+          <div class="title">
+            <h1>TRANSPORT INVOICE</h1>
+            <div>(ORIGINAL FOR RECIPIENT)</div>
+          </div>
+          <div class="qr-area">
+            <div class="qr-label">Invoice QR</div>
+            <div class="qr"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class=""></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span><span class="on"></span><span class=""></span><span class=""></span><span class=""></span><span class="on"></span></div>
+          </div>
+        </section>
+
+        <section class="company-meta">
+          <div class="company-address">
+            <div class="blue-name">NPFC Logistics</div>
+            <div class="line">Khasra No. 353,</div>
+            <div class="line">Lajogi Nagar, Pahadia,</div>
+            <div class="line">Indore (M.P.) - 452020</div>
+            <div class="kv "><span>GSTIN/UIN</span><b>:</b><span class="v">23AABCN2000P1Z4</span></div>
+            <div class="kv "><span>State Name</span><b>:</b><span class="v">Madhya Pradesh, Code : 23</span></div>
+            <div class="kv "><span>E-Mail</span><b>:</b><span class="v">operations@npfc.in</span></div>
+            <div class="kv "><span>Phone</span><b>:</b><span class="v">0731-XXXXXXX</span></div>
+          </div>
+          <div class="invoice-meta">
+            <div class="kv "><span>Invoice No.</span><b>:</b><span class="v">NPFC/2026/000999</span></div>
+            <div class="kv "><span>Invoice Date</span><b>:</b><span class="v">11 Jun 2026</span></div>
+            <div class="kv "><span>Trip Number</span><b>:</b><span class="v">TRP/26/00999-LONG-LONG</span></div>
+            <div class="kv "><span>Vehicle Number</span><b>:</b><span class="v">MP09HF9480-LONG</span></div>
+            <div class="kv "><span>Delivery Note No.</span><b>:</b><span class="v">DN/TRP/26/00999-LONG-LONG</span></div>
+            <div class="kv "><span>Reference No. &amp; Date</span><b>:</b><span class="v">PO/ASHOKA-BOYS-HOSTEL-BISHANPUR-DEHRADUN-LONG-REFERENCE-2026 dt. 11-Jun-2026</span></div>
+            <div class="kv "><span>Dispatched Through</span><b>:</b><span class="v">NPFC Fleet</span></div>
+            <div class="kv "><span>Place of Receipt</span><b>:</b><span class="v">Ashoka Boys Hostel Bishanpur, Near Long Landmark, Dehradun, Uttarakhand, 248001, India</span></div>
+            <div class="kv "><span>Place of Delivery</span><b>:</b><span class="v">Industrial Area Phase II, Very Long Warehouse Address, Pithampur, Dhar, Madhya Pradesh, 454775</span></div>
+          </div>
+        </section>
+
+        <section class="parties">
+          <div class="party">
+            <div class="box-title">CONSIGNOR (From)</div>
+            <div class="kv "><span>Company Name</span><b>:</b><span class="v">M/s. ____________________</span></div>
+            <div class="kv address-row"><span>Address</span><b>:</b><span class="v">____________________________</span></div>
+            <div class="kv "><span>GSTIN/UIN</span><b>:</b><span class="v">________________</span></div>
+            <div class="kv "><span>Contact Person</span><b>:</b><span class="v">________________</span></div>
+            <div class="kv "><span>Contact No.</span><b>:</b><span class="v">________________</span></div>
+          </div>
+          <div class="party">
+            <div class="box-title">CONSIGNEE (To)</div>
+            <div class="kv "><span>Company Name</span><b>:</b><span class="v">M/s. Bhopal Engineering Works and Integrated Logistics Procurement Division</span></div>
+            <div class="kv address-row"><span>Address</span><b>:</b><span class="v">45, Industrial Area, Mandideep, Bhopal with a very long address line intended to test three line ellipsis and wrapping inside the consignee box without changing invoice height</span></div>
+            <div class="kv "><span>GSTIN/UIN</span><b>:</b><span class="v">23AABCB1234L1Z9</span></div>
+            <div class="kv "><span>Contact Person</span><b>:</b><span class="v">Mr. Suresh Patel</span></div>
+            <div class="kv "><span>Contact No.</span><b>:</b><span class="v">98270-XXXXXX</span></div>
+          </div>
+        </section>
+
+        <section class="payee">
+          <div class="section-title">PAYEE / BILLING CONTACT PERSON DETAILS</div>
+          <div class="payee-grid">
+            <div class="kv "><span>Company Name</span><b>:</b><span class="v">M/s. Bhopal Engineering Works and Integrated Logistics Procurement Division</span></div>
+            <div class="kv "><span>Mobile No.</span><b>:</b><span class="v">98270-XXXXXX</span></div>
+            <div class="kv "><span>Contact Person</span><b>:</b><span class="v">Mr. Suresh Patel</span></div>
+            <div class="kv "><span>Email ID</span><b>:</b><span class="v">suresh.patel@bew.in</span></div>
+          </div>
+        </section>
+
+        <section class="trip">
+          <div class="section-title">TRIP DETAILS</div>
+          <div class="trip-grid">
+            <div class="th">Vehicle Number</div><div class="th">Driver Name</div><div class="th">Driver Mobile No.</div><div class="th">Material Description</div><div class="th">Weight (MT)</div><div class="th">LR Number</div>
+            <div class="td">MP09HF9480-LONG</div><div class="td">Rakesh Yadav Long Name</div><div class="td">97555-XXXXXX</div><div class="td">Material / Goods</div><div class="td">____ MT</div><div class="td">TRP/26/00999-LONG-LONG</div>
+          </div>
+          <div class="loc-grid">
+            <div class="th">Loading Point</div><div class="th">Unloading Point</div><div class="th">Distance (KM)</div>
+            <div class="td">Ashoka Boys Hostel Bishanpur, Near Long Landmark, Dehradun, Uttarakhand, 248001, India</div><div class="td">Industrial Area Phase II, Very Long Warehouse Address, Pithampur, Dhar, Madhya Pradesh, 454775</div><div class="td">____ KM</div>
+          </div>
+        </section>
+
+        <section class="timing">
+          <div class="section-title">TIMING DETAILS</div>
+          <div class="timing-grid">
+            <div class="th">Arrival Time</div><div class="th">Departure Time</div><div class="th">Total Halt Time</div><div class="th">Delivery Time</div>
+            <div class="td">09 Jun 2026</div><div class="td">________________</div><div class="td">________________</div><div class="td">10 Jun 2026</div>
+          </div>
+        </section>
+
+        <section class="charges">
+          <div class="section-title">CHARGES DETAILS</div>
+          <table class="charges-table">
+            <thead>
+              <tr><th style="width:50%">Description</th><th style="width:20%">Amount</th><th style="width:30%">Remarks</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Freight Charges</td><td class="amount">&#8377; 55,500.00</td><td></td></tr><tr><td>Loading Charges</td><td class="amount">&#8377; 4,000.00</td><td></td></tr><tr><td>Unloading Charges</td><td class="amount">&#8377; 2,000.00</td><td></td></tr><tr><td>Toll Charges</td><td class="amount">&#8377; 1,000.00</td><td></td></tr><tr><td>Additional Charges</td><td class="amount">&#8377; 2,750.00</td><td>Other trip charges</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="payment-summary">
+          <div class="section-title">PAYMENT SUMMARY</div>
+          <div class="summary-row"><strong>Total Amount Payable</strong><b>:</b><div class="summary-value">&#8377; 65,250.00</div></div>
+          <div class="summary-row"><strong>Amount Paid</strong><b>:</b><div class="summary-value">&#8377; 20,000.00</div></div>
+          <div class="summary-row"><strong>Remaining Amount</strong><b>:</b><div class="summary-value red">&#8377; 45,250.00</div></div>
+          <div class="words"><span>Amount Chargeable (in words)</span><b>:</b><strong>Forty Five Thousand Two Hundred Fifty Rupees Only</strong></div>
+        </section>
+
+        <section class="bottom">
+          <div class="small-box">
+            <div class="box-title">OTHER INFORMATION</div>
+            <div class="kv "><span>Payment Terms</span><b>:</b><span class="v">7 Days</span></div>
+            <div class="kv "><span>Payment Mode</span><b>:</b><span class="v">Bank Transfer / NEFT</span></div>
+            <div class="kv "><span>POD Status</span><b>:</b><span class="v">Pending</span></div>
+            <div class="kv "><span>E-Way Bill No.</span><b>:</b><span class="v">NA</span></div>
+          </div>
+          <div class="small-box">
+            <div class="box-title">BANK DETAILS</div>
+            <div class="kv "><span>Bank Name</span><b>:</b><span class="v">HDFC Bank Ltd.</span></div>
+            <div class="kv "><span>Account Number</span><b>:</b><span class="v">502000XXXXXXX</span></div>
+            <div class="kv "><span>IFSC</span><b>:</b><span class="v">HDFC0001234</span></div>
+            <div class="kv "><span>Branch</span><b>:</b><span class="v">Indore - Pithampur Road</span></div>
+          </div>
+        </section>
+
+        <section class="remarks-sign">
+          <div class="remarks">
+            <div class="box-title">REMARKS</div>
+            <div class="remarks-text">Handle POD carefully. This deliberately long remark verifies three-line clamping and keeps the signature section fixed while using the full page.</div>
+          </div>
+          <div class="sign">
+            <div>For <strong>NPFC LOGISTICS</strong></div>
+            <strong>AUTHORISED SIGNATORY</strong>
+          </div>
+        </section>
+
+        <footer class="footer">Thank you for giving us the opportunity to serve you!</footer>
+      </main>
+    </body>
+  </html>

@@ -1,0 +1,44 @@
+
+> @npfc/backend@1.0.0 dev
+> tsx watch src/server.ts
+
+MongoDB Atlas connected.
+NPFC Logistics SaaS API running on http://localhost:8000
+[0mGET /health [32m200[0m 2.380 ms - 51[0m
+[0mGET /health [32m200[0m 0.813 ms - 51[0m
+[0mPOST /api/auth/login [32m200[0m 659.999 ms - 365[0m
+[0mPOST /api/drivers [32m201[0m 77.583 ms - 268[0m
+[0mPOST /api/uploads/driver/6a292aaa8e3c763b727ecfbe [32m201[0m 382.247 ms - 523[0m
+[0mGET /api/uploads/preview?key=drivers%2FZZ-Upload-Driver-1781082794112_6a292aaa8e3c763b727ecfbe%2FLicense.pdf [32m200[0m 6.932 ms - 514[0m
+[0mGET /api/uploads/preview?download=true&filename=test.pdf&key=drivers%2FZZ-Upload-Driver-1781082794112_6a292aaa8e3c763b727ecfbe%2FLicense.pdf [32m200[0m 3.652 ms - 585[0m
+[0mDELETE /api/uploads?entity=driver&id=6a292aaa8e3c763b727ecfbe&key=drivers%2FZZ-Upload-Driver-1781082794112_6a292aaa8e3c763b727ecfbe%2FLicense.pdf [32m204[0m 106.455 ms - -[0m
+[0mDELETE /api/drivers/6a292aaa8e3c763b727ecfbe [32m204[0m 82.262 ms - -[0m
+[0mPOST /api/auth/login [32m200[0m 530.931 ms - 365[0m
+[0mPOST /api/companies [32m201[0m 44.759 ms - 333[0m
+[0mPATCH /api/companies/6a292aca8e3c763b727ecfbf [32m200[0m 49.718 ms - 335[0m
+[0mPOST /api/drivers [32m201[0m 57.378 ms - 267[0m
+[0mPATCH /api/drivers/6a292aca8e3c763b727ecfc0 [32m200[0m 51.588 ms - 267[0m
+[0mPOST /api/vehicles [32m201[0m 53.500 ms - 347[0m
+[0mPATCH /api/vehicles/6a292aca8e3c763b727ecfc1 [32m200[0m 52.900 ms - 354[0m
+[0mPOST /api/trips [32m201[0m 49.008 ms - 516[0m
+[0mPATCH /api/trips/6a292aca8e3c763b727ecfc2 [32m200[0m 97.129 ms - 516[0m
+[0mDELETE /api/trips/6a292aca8e3c763b727ecfc2 [32m204[0m 87.403 ms - -[0m
+[0mDELETE /api/vehicles/6a292aca8e3c763b727ecfc1 [32m204[0m 79.661 ms - -[0m
+[0mDELETE /api/drivers/6a292aca8e3c763b727ecfc0 [32m204[0m 102.177 ms - -[0m
+[0mDELETE /api/companies/6a292aca8e3c763b727ecfbf [32m204[0m 83.390 ms - -[0m
+[0mGET /api/trips [32m200[0m 119.083 ms - 2[0m
+[0mGET /api/dashboard [32m200[0m 327.337 ms - 637[0m
+[0mGET /api/routes [32m200[0m 41.896 ms - 2[0m
+[0mGET /api/vehicles [32m200[0m 41.346 ms - 740[0m
+[0mGET /api/drivers [32m200[0m 40.920 ms - 2[0m
+[0mGET /api/customers [32m200[0m 40.810 ms - 2[0m
+[0mGET /api/invoices [32m200[0m 78.123 ms - 2[0m
+[0mGET /api/payments [32m200[0m 43.179 ms - 2[0m
+[0mGET /api/trips [32m200[0m 97.335 ms - 2[0m
+[0mGET /api/routes [32m200[0m 95.287 ms - 2[0m
+[0mGET /api/vehicles [32m200[0m 102.705 ms - 740[0m
+[0mGET /api/drivers [32m200[0m 32.755 ms - 2[0m
+[0mGET /api/dashboard [32m200[0m 283.191 ms - 637[0m
+[0mGET /api/customers [32m200[0m 29.350 ms - 2[0m
+[0mGET /api/payments [32m200[0m 35.841 ms - 2[0m
+[0mGET /api/invoices [32m200[0m 69.400 ms - 2[0m
