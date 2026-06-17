@@ -53,9 +53,11 @@ export const vehicleSchema = z.object({
   body: z.object({
     vehicleNumber: z.string().min(3),
     rcNumber: z.string().min(3),
+    type: z.string().optional(),
     insuranceExpiry: z.coerce.date(),
     fitnessExpiry: z.coerce.date(),
     permitExpiry: z.coerce.date(),
+    pucExpiry: z.coerce.date().optional(),
     ownerName: z.string().min(2)
   })
 });

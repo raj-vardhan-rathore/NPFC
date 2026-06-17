@@ -4,9 +4,11 @@ import { apiRequest } from "./client";
 export type VehiclePayload = {
   vehicleNumber: string;
   rcNumber: string;
+  type?: string;
   insuranceExpiry: string;
   fitnessExpiry: string;
   permitExpiry: string;
+  pucExpiry?: string;
   ownerName: string;
 };
 

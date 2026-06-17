@@ -17,7 +17,7 @@ import { createPayment, deletePayment, exportPaymentsUrl, updatePayment } from "
 import { deleteUpload, previewUpload, uploadFile } from "./api/uploads";
 import { createBilty, deleteBilty, downloadBilty, getBilties, updateBilty, verifyBilty } from "./api/bilties";
 import { getDocumentRepository, type DocumentRepositoryPayload, type RepositoryDocument, type RepositoryDocumentCategory, type RepositoryDocumentStatus } from "./api/documents";
-import { createExpense as createManualExpense, getExpenseDashboard, type ExpenseDashboard, type ExpensePayload, type ExpenseSummaryRow } from "./api/expenses";
+import { createExpense as createManualExpense, deleteExpense, getExpenseDashboard, updateExpense, type ExpenseDashboard, type ExpensePayload, type ExpenseRow, type ExpenseSummaryRow } from "./api/expenses";
 import { createAccident, createMaintenance, createTyre, deleteMaintenance, getMaintenanceDashboard, getMaintenanceRecord, maintenanceExportUrl, updateMaintenance, type AccidentRecord, type MaintenanceDashboard, type MaintenancePayload, type MaintenanceRecord, type MaintenanceStatus, type TyreRecord } from "./api/maintenance";
 import { generateProfitLossStatement, getProfitLossCashflow, getProfitLossCustomers, getProfitLossDrivers, getProfitLossExpenses, getProfitLossKpis, getProfitLossReceivables, getProfitLossRevenue, getProfitLossTrips, getProfitLossVehicles, profitLossExportUrl, type ProfitLossFilters, type ProfitLossKpiCard, type ProfitLossKpis, type ProfitTripRow } from "./api/profit-loss";
 import { exportReport, getReportCategory, getReportsDashboard, scheduleReport, type ReportCategory, type ReportDefinition, type ReportFilters, type ReportPayload, type ReportsDashboard } from "./api/reports";
@@ -2674,7 +2674,7 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
             />
           </Panel>
 
-          {viewMore && <ExpenseDrilldownModal row={viewMore} dashboard={dashboard} onClose={() => setViewMore(undefined)} />}
+          {viewMore && <ExpenseDrilldownModal row={viewMore} dashboard={dashboard} token={token} onRefresh={loadDashboard} onClose={() => setViewMore(undefined)} />}
         </>
       )}
 
@@ -2707,10 +2707,36 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function ExpenseDrilldownModal({ row, dashboard, onClose }: { row: ExpenseSummaryRow; dashboard: ExpenseDashboard; onClose: () => void }) {
+function ExpenseDrilldownModal({ row, dashboard, token, onRefresh, onClose }: { row: ExpenseSummaryRow; dashboard: ExpenseDashboard; token?: string; onRefresh: () => Promise<void>; onClose: () => void }) {
+  const [editingExpense, setEditingExpense] = useState<ExpenseRow>();
+  const [deletingId, setDeletingId] = useState<string>();
   const matchingRows = dashboard.rows.filter((item) => item.category === row.category && item.source === row.source);
+  const manualRows = matchingRows.filter((item) => item.source === "Manual");
+  const actionCol = manualRows.length ? "Actions" : "";
+  const cols = (cols: string[]) => actionCol ? [...cols, actionCol] : cols;
+
+  const renderRow = (cells: React.ReactNode[], row?: ExpenseRow) => {
+    if (!row || row.source !== "Manual") return cells;
+    return [...cells, <div key={`${row.id}-actions`} className="flex gap-2">
+      <button onClick={() => setEditingExpense(row)} className="rounded-md border border-tower-border px-2 py-1 text-xs text-white hover:border-tower-primary/60">Edit</button>
+      <button disabled={deletingId === row.id} onClick={async () => {
+        if (!window.confirm(`Delete expense "${row.expenseName}"?`)) return;
+        setDeletingId(row.id);
+        try {
+          await deleteExpense(token, row.id);
+          await onRefresh();
+        } catch {
+          // error swallowed; refresh will show stale data
+        } finally {
+          setDeletingId(undefined);
+        }
+      }} className="rounded-md border border-tower-danger/50 px-2 py-1 text-xs text-red-200 disabled:opacity-40">{deletingId === row.id ? "Deleting" : "Delete"}</button>
+    </div>];
+  };
+
   return (
     <ModalShell title={`${row.category} Expense`} subtitle={`${row.source} source breakdown`} onClose={onClose}>
+      {editingExpense && <EditManualExpenseModal expense={editingExpense} onClose={() => setEditingExpense(undefined)} onSave={async (payload) => { await updateExpense(token, editingExpense.id, payload); await onRefresh(); setEditingExpense(undefined); }} />}
       {row.category === "Fuel" ? (
         <div className="space-y-5">
           <div className="grid gap-3 md:grid-cols-3">
@@ -2723,11 +2749,11 @@ function ExpenseDrilldownModal({ row, dashboard, onClose }: { row: ExpenseSummar
           <DataTable columns={["Month", "Amount"]} rows={dashboard.drilldowns.fuel.monthlyTrend.map((item) => [item.name, money(item.amount)])} />
         </div>
       ) : row.category === "Vehicle" ? (
-        <DataTable columns={["Vehicle", "Date", "Amount", "Maintenance Description", "Linked Bill"]} rows={dashboard.drilldowns.maintenance.length ? dashboard.drilldowns.maintenance.map((item) => [item.vehicle, item.date, money(item.amount), item.description, item.linkedBill || "-"]) : matchingRows.map((item) => [item.vehicleNumber || "-", item.date, money(item.amount), item.notes || item.expenseName, item.attachmentUrl || "-"])} />
+        <DataTable columns={cols(["Vehicle", "Date", "Amount", "Maintenance Description", "Linked Bill"])} rows={dashboard.drilldowns.maintenance.length ? dashboard.drilldowns.maintenance.map((item) => renderRow([item.vehicle, item.date, money(item.amount), item.description, item.linkedBill || "-"])) : matchingRows.map((item) => renderRow([item.vehicleNumber || "-", item.date, money(item.amount), item.notes || item.expenseName, item.attachmentUrl || "-"], item))} />
       ) : row.category === "Driver" ? (
-        <DataTable columns={["Driver Name", "Salary", "Advance", "Total"]} rows={dashboard.drilldowns.driver.length ? dashboard.drilldowns.driver.map((item) => [item.driverName, money(item.salary), money(item.advance), money(item.total)]) : matchingRows.map((item) => [item.driverName || "-", /salary/i.test(item.expenseName) ? money(item.amount) : money(0), /advance/i.test(item.expenseName) ? money(item.amount) : money(0), money(item.amount)])} />
+        <DataTable columns={cols(["Driver Name", "Salary", "Advance", "Total"])} rows={dashboard.drilldowns.driver.length ? dashboard.drilldowns.driver.map((item) => renderRow([item.driverName, money(item.salary), money(item.advance), money(item.total)])) : matchingRows.map((item) => renderRow([item.driverName || "-", /salary/i.test(item.expenseName) ? money(item.amount) : money(0), /advance/i.test(item.expenseName) ? money(item.amount) : money(0), money(item.amount)], item))} />
       ) : (
-        <DataTable columns={["Expense", "Date", "Amount", "Paid", "Remaining", "Status", "Notes"]} rows={matchingRows.map((item) => [item.expenseName, item.date, money(item.amount), money(item.paidAmount), money(item.remainingAmount), <Status key={item.id} value={item.status} />, item.notes || "-"])} />
+        <DataTable columns={cols(["Expense", "Date", "Amount", "Paid", "Remaining", "Status", "Notes"])} rows={matchingRows.map((item) => renderRow([item.expenseName, item.date, money(item.amount), money(item.paidAmount), money(item.remainingAmount), <Status key={item.id} value={item.status} />, item.notes || "-"], item))} />
       )}
     </ModalShell>
   );
@@ -2756,6 +2782,66 @@ function AddManualExpenseModal({ onClose, onSave }: { onClose: () => void; onSav
 
   return (
     <ModalShell title="Add Expense" subtitle="Use manual entries only for expenses not already tracked in trips, vehicles, or drivers." onClose={onClose}>
+      <div className="space-y-5">
+        {error && <div className="rounded-md border border-tower-danger/40 bg-tower-danger/10 px-3 py-2 text-sm text-red-200">{error}</div>}
+        <FormSection title="Expense Details">
+          <TextField label="Expense Name" value={payload.expenseName} onChange={(value) => update("expenseName", value)} />
+          <TextField label="Category" value={payload.category} onChange={(value) => update("category", value)} />
+          <NumberField label="Amount" value={payload.amount} onChange={(value) => update("amount", value)} />
+          <DateInput label="Date" value={payload.expenseDate} onChange={(value) => update("expenseDate", value)} />
+          <FieldSelect label="Status" value={payload.status} onChange={(value) => update("status", value as ExpensePayload["status"])} options={["Paid", "Unpaid", "Partial"].map((value) => ({ label: value, value }))} />
+          {payload.status === "Partial" ? <NumberField label="Paid Amount" value={payload.paidAmount || 0} onChange={(value) => update("paidAmount", value)} /> : <ReadOnlyField label="Paid Amount" value={money(payload.status === "Paid" ? payload.amount : 0)} />}
+          <ReadOnlyField label="Remaining Amount" value={money(remaining)} />
+          <TextField label="Notes" value={payload.notes || ""} onChange={(value) => update("notes", value)} />
+          <TextField label="Attachment URL" value={payload.attachmentUrl || ""} onChange={(value) => update("attachmentUrl", value)} />
+        </FormSection>
+        <FormSection title="Recurring">
+          <label className="flex items-center gap-3 rounded-md border border-tower-border bg-tower-card px-3 py-2 text-sm text-white">
+            <input type="checkbox" checked={Boolean(payload.recurring)} onChange={(event) => update("recurring", event.target.checked)} />
+            Recurring
+          </label>
+          <FieldSelect label="Frequency" value={payload.recurrenceFrequency || "Monthly"} onChange={(value) => update("recurrenceFrequency", value as ExpensePayload["recurrenceFrequency"])} options={["Monthly", "Quarterly", "Yearly"].map((value) => ({ label: value, value }))} />
+          <DateInput label="Recurring Until" value={payload.recurringUntil || ""} onChange={(value) => update("recurringUntil", value)} />
+        </FormSection>
+      </div>
+      <ModalActions onClose={onClose} onSave={() => { void save(); }} disabled={saving} label={saving ? "Saving" : "Save Expense"} />
+    </ModalShell>
+  );
+}
+
+function EditManualExpenseModal({ expense, onClose, onSave }: { expense: ExpenseRow; onClose: () => void; onSave: (payload: Partial<ExpensePayload>) => Promise<void> }) {
+  const [payload, setPayload] = useState<ExpensePayload>({
+    expenseName: expense.expenseName,
+    category: expense.category,
+    amount: expense.amount,
+    expenseDate: expense.date,
+    status: expense.status,
+    paidAmount: expense.paidAmount,
+    notes: expense.notes || "",
+    attachmentUrl: expense.attachmentUrl || "",
+    recurring: expense.recurring || false,
+    recurrenceFrequency: (expense.recurrenceFrequency as ExpensePayload["recurrenceFrequency"]) || "Monthly"
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const update = <K extends keyof ExpensePayload>(key: K, value: ExpensePayload[K]) => setPayload((current) => ({ ...current, [key]: value }));
+  const remaining = Math.max((payload.amount || 0) - (payload.status === "Paid" ? payload.amount : payload.status === "Partial" ? payload.paidAmount || 0 : 0), 0);
+
+  const save = async () => {
+    setError("");
+    if (!payload.expenseName.trim()) return setError("Expense name is required.");
+    setSaving(true);
+    try {
+      await onSave({ ...payload, paidAmount: payload.status === "Paid" ? payload.amount : payload.status === "Unpaid" ? 0 : payload.paidAmount });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Expense could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Edit Expense" subtitle="Update expense details." onClose={onClose}>
       <div className="space-y-5">
         {error && <div className="rounded-md border border-tower-danger/40 bg-tower-danger/10 px-3 py-2 text-sm text-red-200">{error}</div>}
         <FormSection title="Expense Details">
@@ -4466,12 +4552,14 @@ function VehicleModule({ vehicles, trips, drivers, invoices, token, refreshData 
       {addOpen && (
         <AddVehicleModal
           onClose={() => setAddOpen(false)}
-          onSave={async (vehicle) => {
+            onSave={async (vehicle) => {
             await createVehicle(token, {
               vehicleNumber: vehicle.number,
               rcNumber: vehicle.number,
+              type: vehicle.type,
               insuranceExpiry: vehicle.insuranceExpiry,
               fitnessExpiry: vehicle.fitnessExpiry,
+              pucExpiry: vehicle.pucExpiry,
               permitExpiry: vehicle.permitExpiry,
               ownerName: vehicle.ownerName
             });
@@ -4488,8 +4576,10 @@ function VehicleModule({ vehicles, trips, drivers, invoices, token, refreshData 
             await updateVehicle(token, editVehicle.id, {
               vehicleNumber: vehicle.number,
               rcNumber: vehicle.number,
+              type: vehicle.type,
               insuranceExpiry: vehicle.insuranceExpiry,
               fitnessExpiry: vehicle.fitnessExpiry,
+              pucExpiry: vehicle.pucExpiry,
               permitExpiry: vehicle.permitExpiry,
               ownerName: vehicle.ownerName
             });
@@ -5381,8 +5471,23 @@ function AddCustomerModal({ customer, onClose, onSave }: { customer?: Customer; 
   const [email, setEmail] = useState(customer?.email || "");
   const [address, setAddress] = useState(customer?.address || "");
   const [locations, setLocations] = useState<CustomerLocation[]>(customer?.locations || []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const save = async () => {
+    setError("");
+    if (!name.trim() || !phone.trim()) return;
+    setSaving(true);
+    try {
+      await onSave({ id: customer?.id || `customer-${Date.now()}`, name, gstNumber, contactPerson, phone, email, address, locations });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Customer could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <ModalShell title={customer ? "Edit Customer" : "Add Customer"} subtitle="Create customer master data and saved logistics locations." onClose={onClose}>
+      {error && <div className="mb-4 rounded-md border border-tower-danger/40 bg-tower-danger/10 px-3 py-2 text-sm text-red-200">{error}</div>}
       <div className="grid gap-4 md:grid-cols-2">
         <TextField label="Customer Name" value={name} onChange={setName} />
         <TextField label="GST Number" value={gstNumber} onChange={setGstNumber} />
@@ -5394,7 +5499,7 @@ function AddCustomerModal({ customer, onClose, onSave }: { customer?: Customer; 
       <div className="mt-5">
         <CustomerLocationsPanel locations={locations} onChange={setLocations} compact />
       </div>
-      <ModalActions onClose={onClose} onSave={() => onSave({ id: customer?.id || `customer-${Date.now()}`, name, gstNumber, contactPerson, phone, email, address, locations })} disabled={!name.trim() || !phone.trim()} label="Save Customer" />
+      <ModalActions onClose={onClose} onSave={() => { void save(); }} disabled={!name.trim() || !phone.trim() || saving} label={saving ? "Saving..." : "Save Customer"} />
     </ModalShell>
   );
 }
