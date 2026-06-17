@@ -10,7 +10,7 @@ import { login as loginApi } from "./api/auth";
 import type { Bilty, Customer, CustomerLocation, DashboardData, Driver, Invoice, Payment, Trip, Vehicle } from "./types";
 import { createCompany, deleteCompany, updateCompany } from "./api/companies";
 import { createDriver, deleteDriver, updateDriver } from "./api/drivers";
-import { createVehicle, deleteVehicle, updateVehicle } from "./api/vehicles";
+import { createVehicle, deleteVehicle, updateVehicle, type VehiclePayload } from "./api/vehicles";
 import { createTrip, updateTrip as updateTripApi, deleteTrip as deleteTripApi } from "./api/trips";
 import { generateInvoice as generateInvoiceApi, updateInvoice as updateInvoiceApi, regenerateInvoice as regenerateInvoiceApi, deleteInvoice as deleteInvoiceApi } from "./api/invoices";
 import { createPayment, deletePayment, exportPaymentsUrl, updatePayment } from "./api/payments";
@@ -135,7 +135,7 @@ export function App() {
 
 function Login() {
   const { setSession } = useSession();
-  const { register, handleSubmit, formState } = useForm({ defaultValues: { email: "admin@npfc.com", password: "Admin@123" } });
+  const { register, handleSubmit, formState } = useForm({ defaultValues: { email: "", password: "" } });
   const [error, setError] = useState("");
 
   const onSubmit = handleSubmit(async (values) => {
@@ -150,7 +150,7 @@ function Login() {
 
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_20%_10%,rgba(59,130,246,0.18),transparent_34%),#0B1220] px-6">
-      <form onSubmit={onSubmit} className="w-full max-w-md rounded-lg border border-tower-border bg-tower-card p-8 shadow-tower">
+      <form onSubmit={onSubmit} autoComplete="off" className="w-full max-w-md rounded-lg border border-tower-border bg-tower-card p-8 shadow-tower">
         <div className="mb-8 flex items-center gap-3">
           <Logo />
           <div>
@@ -160,11 +160,11 @@ function Login() {
         </div>
         <label className="mb-4 block text-sm text-tower-muted">
           Email
-          <input {...register("email")} className="mt-2 w-full rounded-md border border-tower-border bg-[#0B1220] px-3 py-3 text-white outline-none ring-tower-primary focus:ring-2" />
+          <input {...register("email")} autoComplete="off" className="mt-2 w-full rounded-md border border-tower-border bg-[#0B1220] px-3 py-3 text-white outline-none ring-tower-primary focus:ring-2" />
         </label>
         <label className="mb-5 block text-sm text-tower-muted">
           Password
-          <input type="password" {...register("password")} className="mt-2 w-full rounded-md border border-tower-border bg-[#0B1220] px-3 py-3 text-white outline-none ring-tower-primary focus:ring-2" />
+          <input type="password" {...register("password")} autoComplete="new-password" className="mt-2 w-full rounded-md border border-tower-border bg-[#0B1220] px-3 py-3 text-white outline-none ring-tower-primary focus:ring-2" />
         </label>
         {error && <p className="mb-4 rounded-md border border-tower-danger/40 bg-tower-danger/10 px-3 py-2 text-sm text-red-200">{error}</p>}
         <button disabled={formState.isSubmitting} className="w-full rounded-md bg-tower-primary px-4 py-3 font-medium text-white shadow-lg shadow-blue-950/30">
@@ -2720,7 +2720,7 @@ function ExpenseDrilldownModal({ row, dashboard, token, onRefresh, onClose }: { 
     return [...cells, <div key={`${row.id}-actions`} className="flex gap-2">
       <button onClick={() => setEditingExpense(row)} className="rounded-md border border-tower-border px-2 py-1 text-xs text-white hover:border-tower-primary/60">Edit</button>
       <button disabled={deletingId === row.id} onClick={async () => {
-        if (!window.confirm(`Delete expense "${row.expenseName}"?`)) return;
+        if (!window.confirm("Are you sure you want to delete this expense?")) return;
         setDeletingId(row.id);
         try {
           await deleteExpense(token, row.id);
@@ -3245,9 +3245,21 @@ function TripsModule({ trips, customers, vehicles, drivers, invoices, bilties, d
         onBack={() => setSelectedTripId(undefined)}
         onWorkflow={(status) => { void advanceWorkflow(selectedTrip, status); }}
         onGenerateInvoice={() => setInvoiceTripId(selectedTrip.id)}
-        onPaymentStatus={async (status) => {
+        onPaymentStatus={async (status, amountReceived) => {
           if (!selectedTrip.id.startsWith("local-")) {
-            await updateTripApi(token, selectedTrip.id, { status: backendTripStatus(status === "Paid" ? "Payment Received" : selectedTrip.status) });
+            const linkedInvoice = localInvoices.find((invoice) => invoice.tripId === selectedTrip.id);
+            if (status === "Partial" && linkedInvoice && amountReceived > 0) {
+              await createPayment(token, {
+                invoiceId: linkedInvoice.id,
+                amountReceived,
+                paymentDate: today(),
+                mode: "NEFT",
+                referenceNumber: `TRIP-${selectedTrip.tripNumber}-PARTIAL-${Date.now()}`,
+                remarks: "Partial payment recorded from Trip module."
+              });
+            }
+            const targetStatus = status === "Paid" ? "Payment Received" : linkedInvoice ? "Invoice Generated" : "Delivered";
+            await updateTripApi(token, selectedTrip.id, { status: backendTripStatus(targetStatus) });
             await refreshData();
           } else {
             updateTrip(selectedTrip.id, { paymentStatus: status, status: status === "Paid" ? "Payment Received" : selectedTrip.status });
@@ -3546,7 +3558,7 @@ function AddTripModal({ trip, customers, vehicles, drivers, nextTripNumber, onCl
   );
 }
 
-function TripDetailsPage({ trip, invoice, bilty, token, onBack, onWorkflow, onGenerateInvoice, onPaymentStatus, driverTransactions = [], onDriverExpenseSave, onBiltySaved = () => undefined }: { trip: LocalTrip; invoice?: Invoice; bilty?: Bilty; token?: string; onBack: () => void; onWorkflow: (status?: string) => void; onGenerateInvoice: () => void; onPaymentStatus: (status: "Pending" | "Partial" | "Paid") => void; driverTransactions?: DriverTransaction[]; onDriverExpenseSave?: (transaction: DriverTransaction) => void; onBiltySaved?: () => void | Promise<void> }) {
+function TripDetailsPage({ trip, invoice, bilty, token, onBack, onWorkflow, onGenerateInvoice, onPaymentStatus, driverTransactions = [], onDriverExpenseSave, onBiltySaved = () => undefined }: { trip: LocalTrip; invoice?: Invoice; bilty?: Bilty; token?: string; onBack: () => void; onWorkflow: (status?: string) => void; onGenerateInvoice: () => void; onPaymentStatus: (status: "Pending" | "Partial" | "Paid", amountReceived: number) => void; driverTransactions?: DriverTransaction[]; onDriverExpenseSave?: (transaction: DriverTransaction) => void; onBiltySaved?: () => void | Promise<void> }) {
   const [expenses, setExpenses] = useState([
     { type: "Diesel", amount: trip.dieselExpense || 0 },
     { type: "Toll", amount: trip.tollExpense || 0 },
@@ -3687,8 +3699,8 @@ function TripDetailsPage({ trip, invoice, bilty, token, onBack, onWorkflow, onGe
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <button onClick={onGenerateInvoice} className="rounded-md bg-tower-primary px-3 py-2 text-sm font-medium text-white">Generate Invoice</button>
-            <button onClick={onGenerateInvoice} className="rounded-md border border-tower-border px-3 py-2 text-sm">Preview Invoice</button>
-            <button className="rounded-md border border-tower-border px-3 py-2 text-sm">Download Invoice</button>
+            <button onClick={() => { if (invoice?.pdfKey) void openSignedUpload(token, invoice.pdfKey, false, `${invoice.invoiceNumber}.pdf`); else onGenerateInvoice(); }} className="rounded-md border border-tower-border px-3 py-2 text-sm">Preview Invoice</button>
+            <button disabled={!invoice?.pdfKey} onClick={() => { if (invoice?.pdfKey) void openSignedUpload(token, invoice.pdfKey, true, `${invoice.invoiceNumber}.pdf`); }} className="rounded-md border border-tower-border px-3 py-2 text-sm disabled:opacity-40">Download Invoice</button>
             <button onClick={onGenerateInvoice} className="rounded-md border border-tower-border px-3 py-2 text-sm">Send Invoice</button>
           </div>
         </Panel>
@@ -3696,16 +3708,16 @@ function TripDetailsPage({ trip, invoice, bilty, token, onBack, onWorkflow, onGe
         <Panel title="Payment" action={<Status value={trip.paymentStatus || invoice?.status || "Pending"} />}>
           <div className="grid gap-4 md:grid-cols-3">
             <Info label="Invoice Amount" value={money(invoiceAmount)} />
-            <NumberField label="Amount Received" value={received} onChange={(value) => { setReceived(value); onPaymentStatus(value <= 0 ? "Pending" : value >= invoiceAmount ? "Paid" : "Partial"); }} />
+            <NumberField label="Amount Received" value={received} onChange={setReceived} />
             <Info label="Outstanding Amount" value={money(outstanding)} />
           </div>
           <div className="mt-5 rounded-md border border-tower-border bg-[#0B1220] p-3 text-sm text-tower-muted">
             Payment History: {received > 0 ? `${money(received)} recorded against this invoice.` : "No payments recorded yet."}
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            <button onClick={() => onPaymentStatus(received > 0 && received < invoiceAmount ? "Partial" : "Pending")} className="rounded-md border border-tower-border px-3 py-2 text-sm">Record Payment</button>
-            <button onClick={() => { setReceived(invoiceAmount); onPaymentStatus("Paid"); }} className="rounded-md bg-tower-success/90 px-3 py-2 text-sm font-medium text-white">Mark Paid</button>
-            <button onClick={() => { setReceived(0); onPaymentStatus("Pending"); }} className="rounded-md border border-tower-border px-3 py-2 text-sm">Mark Unpaid</button>
+            <button onClick={() => onPaymentStatus(received <= 0 ? "Pending" : received >= invoiceAmount ? "Paid" : "Partial", received)} className="rounded-md border border-tower-border px-3 py-2 text-sm">Record Payment</button>
+            <button onClick={() => { setReceived(invoiceAmount); onPaymentStatus("Paid", invoiceAmount); }} className="rounded-md bg-tower-success/90 px-3 py-2 text-sm font-medium text-white">Mark Paid</button>
+            <button onClick={() => { setReceived(0); onPaymentStatus("Pending", 0); }} className="rounded-md border border-tower-border px-3 py-2 text-sm">Mark Unpaid</button>
           </div>
         </Panel>
       </section>
@@ -4457,10 +4469,14 @@ function VehicleModule({ vehicles, trips, drivers, invoices, token, refreshData 
         onOpenTrip={(trip) => setSelectedTrip(enrichTrip(trip, invoices, 0))}
         onDocumentSave={async (document, file) => {
           if (file) await uploadFile(token, "vehicle", selectedVehicle.id, file, vehicleUploadType(document.type), false);
+          const expiryPatch = vehicleExpiryPatch(document.type, document.expiryDate);
+          if (expiryPatch) await updateVehicle(token, selectedVehicle.id, expiryPatch);
           await refreshData();
         }}
         onDocumentReplace={async (_documentId, patch, file) => {
           if (file) await uploadFile(token, "vehicle", selectedVehicle.id, file, vehicleUploadType(patch.type || "Document"), true);
+          const expiryPatch = patch.expiryDate && patch.type ? vehicleExpiryPatch(patch.type, patch.expiryDate) : undefined;
+          if (expiryPatch) await updateVehicle(token, selectedVehicle.id, expiryPatch);
           await refreshData();
         }}
         onDocumentDelete={async (document) => {
@@ -5997,7 +6013,17 @@ function vehicleUploadType(type: string) {
   if (/insurance/i.test(type)) return "Insurance";
   if (/permit/i.test(type)) return "Permit";
   if (/fitness/i.test(type)) return "Fitness";
+  if (/puc|pollution/i.test(type)) return "PUC";
   return type;
+}
+
+function vehicleExpiryPatch(type: string, expiryDate: string): Partial<VehiclePayload> | undefined {
+  if (!expiryDate) return undefined;
+  if (/insurance/i.test(type)) return { insuranceExpiry: expiryDate };
+  if (/puc|pollution/i.test(type)) return { pucExpiry: expiryDate };
+  if (/fitness/i.test(type)) return { fitnessExpiry: expiryDate };
+  if (/permit/i.test(type)) return { permitExpiry: expiryDate };
+  return undefined;
 }
 
 function driverDocumentsFromApi(driver: Driver): DriverDocument[] {

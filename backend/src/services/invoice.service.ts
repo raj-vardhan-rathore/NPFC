@@ -97,12 +97,61 @@ export async function syncInvoiceForTrip(tripId: string, user = "System") {
   const invoice = await InvoiceModel.findById(trip.invoiceId);
   if (!invoice || invoice.paymentStatus === "Cancelled") return;
 
+  await reconcileTripPayment(trip, invoice, user);
   const paid = await invoicePaidAmount(String(invoice._id));
   invoice.invoiceAmount = trip.freightAmount + (invoice.additionalCharges || 0);
   invoice.paymentStatus = paid <= 0 ? "Generated" : paid >= invoice.invoiceAmount ? "Paid" : "Partially Paid";
   invoice.activityLog.push({ dateTime: new Date(), user, action: "Invoice Synced", remarks: "Trip changes synchronized and PDF queued for regeneration." });
   await invoice.save();
   return uploadInvoicePdf(invoice);
+}
+
+async function reconcileTripPayment(trip: any, invoice: any, user: string) {
+  const referenceNumber = `TRIP-${String(trip._id)}-PAID`;
+  if (trip.status !== "Payment Received") {
+    await PaymentModel.deleteMany({ referenceNumber, createdBy: "System" });
+    return;
+  }
+
+  const invoiceAmount = Number(trip.freightAmount || 0) + Number(invoice.additionalCharges || 0);
+  const existingSystemPayment = await PaymentModel.findOne({ referenceNumber, createdBy: "System" });
+  const paidWithoutSystem = Math.max((await invoicePaidAmount(String(invoice._id))) - Number(existingSystemPayment?.amount || 0), 0);
+  const balance = Math.max(invoiceAmount - paidWithoutSystem, 0);
+
+  if (balance <= 0) {
+    if (existingSystemPayment) await existingSystemPayment.deleteOne();
+    return;
+  }
+
+  const paymentBody = {
+    paymentId: `PAY-${String(trip._id).slice(-8).toUpperCase()}`,
+    direction: "Incoming",
+    category: "Invoice Payment",
+    partyType: "Customer",
+    partyName: "",
+    customerId: trip.companyId,
+    invoiceId: invoice._id,
+    allocations: [{ invoiceId: invoice._id, amount: balance }],
+    tripId: trip._id,
+    vehicleId: trip.vehicleId,
+    amount: balance,
+    amountReceived: balance,
+    paymentDate: new Date(),
+    mode: "Bank Transfer",
+    referenceNumber,
+    status: "Recorded",
+    remarks: "System payment created from Trip payment status.",
+    createdBy: "System",
+    updatedBy: user,
+    auditLog: [{ dateTime: new Date(), user, action: "Trip Payment Synced", remarks: "Trip marked paid; invoice payment synchronized." }]
+  };
+
+  if (existingSystemPayment) {
+    Object.assign(existingSystemPayment, paymentBody);
+    await existingSystemPayment.save();
+  } else {
+    await PaymentModel.create(paymentBody as any);
+  }
 }
 
 export async function invoicePaidAmount(invoiceId: string) {

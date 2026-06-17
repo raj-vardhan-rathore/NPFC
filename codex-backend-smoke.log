@@ -1,0 +1,9 @@
+
+> @npfc/backend@1.0.0 start
+> node dist/server.js
+
+MongoDB Atlas connected.
+NPFC admin user created
+NPFC Logistics SaaS API running on http://localhost:8000
+[0mGET /health [32m200[0m 2.430 ms - 51[0m
+[0mGET /health [32m200[0m 0.573 ms - 51[0m

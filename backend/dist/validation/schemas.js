@@ -9,6 +9,18 @@ export const authLoginSchema = z.object({
         password: z.string().min(1)
     })
 });
+const optionalTrimmedString = z.preprocess((value) => {
+    if (typeof value !== "string")
+        return value;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+}, z.string().optional());
+const optionalEmail = z.preprocess((value) => {
+    if (typeof value !== "string")
+        return value;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+}, z.string().email().optional());
 export const userCreateSchema = z.object({
     body: z.object({
         name: z.string().min(2),
@@ -20,11 +32,11 @@ export const userCreateSchema = z.object({
 export const companySchema = z.object({
     body: z.object({
         companyName: z.string().min(2),
-        gstNumber: z.string().min(5),
-        address: z.string().min(3),
-        contactPerson: z.string().optional(),
+        gstNumber: z.string().trim().min(2),
+        address: z.string().trim().min(2),
+        contactPerson: optionalTrimmedString,
         phone: z.string().min(6),
-        email: z.string().email().optional(),
+        email: optionalEmail,
         locations: z.array(z.object({
             id: z.string(),
             name: z.string(),
