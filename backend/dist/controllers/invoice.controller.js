@@ -27,6 +27,8 @@ export const listInvoices = asyncHandler(async (_req, res) => {
         const trip = invoice.tripId || {};
         const customer = trip.companyId || {};
         const paid = paidMap.get(String(invoice._id)) || 0;
+        const outstandingAmount = Math.max(invoice.invoiceAmount - paid, 0);
+        const status = outstandingAmount <= 0 ? "Paid" : paid > 0 ? "Partially Paid" : invoice.paymentStatus;
         return {
             ...invoice,
             id: String(invoice._id),
@@ -35,8 +37,8 @@ export const listInvoices = asyncHandler(async (_req, res) => {
             invoiceDate: invoice.createdAt,
             dueDate: invoice.createdAt,
             amount: invoice.invoiceAmount,
-            outstandingAmount: Math.max(invoice.invoiceAmount - paid, 0),
-            status: invoice.paymentStatus,
+            outstandingAmount,
+            status,
             pdfPath: invoice.pdfUrl,
             pdfKey: invoice.pdfKey,
             emailStatus: invoice.sentStatus

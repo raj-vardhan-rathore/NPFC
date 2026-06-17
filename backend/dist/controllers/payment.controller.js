@@ -137,10 +137,12 @@ async function syncLinkedInvoices(payment, previousInvoiceIds = []) {
         invoice.paymentStatus = paid >= invoice.invoiceAmount ? "Paid" : paid > 0 ? "Partially Paid" : "Generated";
         invoice.activityLog.push({ dateTime: new Date(), user: payment.updatedBy || payment.createdBy || "System", action: "Payment Synced", remarks: `${paid} received against invoice.` });
         await invoice.save();
-        await TripModel.findByIdAndUpdate(invoice.tripId, {
-            invoiceId: invoice._id,
-            status: invoice.paymentStatus === "Paid" ? "Payment Received" : invoice.paymentStatus === "Partially Paid" ? "Invoice Generated" : undefined
-        }).catch(() => undefined);
+        const tripPatch = { invoiceId: invoice._id };
+        if (invoice.paymentStatus === "Paid")
+            tripPatch.status = "Payment Received";
+        else if (invoice.paymentStatus === "Partially Paid")
+            tripPatch.status = "Invoice Generated";
+        await TripModel.findByIdAndUpdate(invoice.tripId, { $set: tripPatch }).catch(() => undefined);
     }
 }
 function invoiceIdsForPayment(payment) {

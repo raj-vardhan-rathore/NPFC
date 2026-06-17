@@ -2526,6 +2526,8 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
   const [error, setError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMore, setViewMore] = useState<ExpenseSummaryRow>();
+  const [editingExpense, setEditingExpense] = useState<ExpenseRow>();
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string>();
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -2559,6 +2561,30 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
     anchor.click();
     URL.revokeObjectURL(url);
   };
+  const manualExpenseActions = (row: ExpenseRow) => row.source === "Manual" ? (
+    <div key={`${row.id}-actions`} className="flex gap-2">
+      <button onClick={() => setEditingExpense(row)} className="rounded-md border border-tower-border px-2 py-1 text-xs text-white hover:border-tower-primary/60">Edit</button>
+      <button
+        disabled={deletingExpenseId === row.id}
+        onClick={async () => {
+          if (!window.confirm("Are you sure you want to delete this expense?")) return;
+          setDeletingExpenseId(row.id);
+          setError("");
+          try {
+            await deleteExpense(token, row.id);
+            await loadDashboard();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Expense could not be deleted.");
+          } finally {
+            setDeletingExpenseId(undefined);
+          }
+        }}
+        className="rounded-md border border-tower-danger/50 px-2 py-1 text-xs text-red-200 disabled:opacity-40"
+      >
+        {deletingExpenseId === row.id ? "Deleting" : "Delete"}
+      </button>
+    </div>
+  ) : <span key={`${row.id}-locked`} className="text-xs text-tower-muted">Source managed</span>;
 
   if (loading && !dashboard) return <Skeleton />;
 
@@ -2674,6 +2700,23 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
             />
           </Panel>
 
+          <Panel title="Expense Records" action={`${dashboard.rows.length} filtered`}>
+            <DataTable
+              columns={["Expense", "Category", "Source", "Date", "Amount", "Paid", "Remaining", "Status", "Actions"]}
+              rows={dashboard.rows.map((row) => [
+                row.expenseName,
+                row.category,
+                row.source,
+                row.date,
+                money(row.amount),
+                money(row.paidAmount),
+                money(row.remainingAmount),
+                <Status key={`${row.id}-status`} value={row.status} />,
+                manualExpenseActions(row)
+              ])}
+            />
+          </Panel>
+
           {viewMore && <ExpenseDrilldownModal row={viewMore} dashboard={dashboard} token={token} onRefresh={loadDashboard} onClose={() => setViewMore(undefined)} />}
         </>
       )}
@@ -2688,6 +2731,7 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
           }}
         />
       )}
+      {editingExpense && <EditManualExpenseModal expense={editingExpense} onClose={() => setEditingExpense(undefined)} onSave={async (payload) => { await updateExpense(token, editingExpense.id, payload); await loadDashboard(); setEditingExpense(undefined); }} />}
     </div>
   );
 }
@@ -2919,6 +2963,19 @@ async function openSignedUpload(token: string | undefined, key: string, download
   if (!key) return;
   const { url } = await previewUpload(token, key, download, filename);
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function openInvoicePdf(invoice: Pick<Invoice, "pdfKey" | "pdfPath" | "invoiceNumber">, token: string | undefined, download = false) {
+  if (invoice.pdfPath) {
+    const url = invoice.pdfPath.startsWith("http") ? invoice.pdfPath : `${getApiBaseUrl()}${invoice.pdfPath}`;
+    if (download) {
+      void downloadApiFile(token, url, `${invoice.invoiceNumber}.pdf`);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (invoice.pdfKey) void openSignedUpload(token, invoice.pdfKey, download, `${invoice.invoiceNumber}.pdf`);
 }
 
 async function downloadApiFile(token: string | undefined, path: string, filename: string) {
@@ -3699,8 +3756,8 @@ function TripDetailsPage({ trip, invoice, bilty, token, onBack, onWorkflow, onGe
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <button onClick={onGenerateInvoice} className="rounded-md bg-tower-primary px-3 py-2 text-sm font-medium text-white">Generate Invoice</button>
-            <button onClick={() => { if (invoice?.pdfKey) void openSignedUpload(token, invoice.pdfKey, false, `${invoice.invoiceNumber}.pdf`); else onGenerateInvoice(); }} className="rounded-md border border-tower-border px-3 py-2 text-sm">Preview Invoice</button>
-            <button disabled={!invoice?.pdfKey} onClick={() => { if (invoice?.pdfKey) void openSignedUpload(token, invoice.pdfKey, true, `${invoice.invoiceNumber}.pdf`); }} className="rounded-md border border-tower-border px-3 py-2 text-sm disabled:opacity-40">Download Invoice</button>
+            <button onClick={() => { if (invoice?.pdfKey || invoice?.pdfPath) openInvoicePdf(invoice, token, false); else onGenerateInvoice(); }} className="rounded-md border border-tower-border px-3 py-2 text-sm">Preview Invoice</button>
+            <button disabled={!invoice?.pdfKey && !invoice?.pdfPath} onClick={() => { if (invoice) openInvoicePdf(invoice, token, true); }} className="rounded-md border border-tower-border px-3 py-2 text-sm disabled:opacity-40">Download Invoice</button>
             <button onClick={onGenerateInvoice} className="rounded-md border border-tower-border px-3 py-2 text-sm">Send Invoice</button>
           </div>
         </Panel>
@@ -4759,11 +4816,11 @@ function AddVehicleModal({ vehicle, onClose, onSave }: { vehicle?: Vehicle; onCl
   const [type, setType] = useState(vehicle?.type || "32 FT MXL");
   const [ownerName, setOwnerName] = useState(vehicle?.ownerName || "NPFC Logistics");
   const [status, setStatus] = useState(vehicle?.status || "Available");
-  const [insuranceExpiry, setInsuranceExpiry] = useState(vehicle?.insuranceExpiry || today(365));
-  const [pucExpiry, setPucExpiry] = useState(vehicle?.pucExpiry || today(180));
-  const [fitnessExpiry, setFitnessExpiry] = useState(vehicle?.fitnessExpiry || today(365));
-  const [permitExpiry, setPermitExpiry] = useState(vehicle?.permitExpiry || today(365));
-  const [serviceDue, setServiceDue] = useState(vehicle?.serviceDue || today(30));
+  const [insuranceExpiry, setInsuranceExpiry] = useState(dateInputValue(vehicle?.insuranceExpiry, today(365)));
+  const [pucExpiry, setPucExpiry] = useState(dateInputValue(vehicle?.pucExpiry, today(180)));
+  const [fitnessExpiry, setFitnessExpiry] = useState(dateInputValue(vehicle?.fitnessExpiry, today(365)));
+  const [permitExpiry, setPermitExpiry] = useState(dateInputValue(vehicle?.permitExpiry, today(365)));
+  const [serviceDue, setServiceDue] = useState(dateInputValue(vehicle?.serviceDue, today(30)));
 
   return (
     <ModalShell title={vehicle ? "Edit Vehicle" : "Add Vehicle"} subtitle="Create a fleet record with compliance dates." onClose={onClose}>
@@ -4787,7 +4844,7 @@ function DocumentModal({ vehicleId, document, onClose, onSave }: { vehicleId: st
   const initialType = document?.type && documentTypes.includes(document.type) ? document.type : document?.type ? "Other" : "Insurance";
   const [type, setType] = useState(initialType);
   const [customType, setCustomType] = useState(document?.type && !documentTypes.includes(document.type) ? document.type : "");
-  const [expiryDate, setExpiryDate] = useState(document?.expiryDate || today(365));
+  const [expiryDate, setExpiryDate] = useState(dateInputValue(document?.expiryDate, today(365)));
   const [fileName, setFileName] = useState(document?.fileName || "");
   const [fileUrl, setFileUrl] = useState(document?.fileUrl || "");
   const [file, setFile] = useState<File>();
@@ -5093,8 +5150,8 @@ function InvoiceDetailsPage({ invoice, trip, customer, payments, token, refreshD
           <p className="text-sm text-tower-muted">{trip?.tripNumber || invoice.tripId} - {customer?.name || "Customer"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button disabled={!invoice.pdfKey} onClick={() => { if (invoice.pdfKey) void openSignedUpload(token, invoice.pdfKey, false, `${invoice.invoiceNumber}.pdf`); }} className="rounded-md border border-tower-border px-4 py-2 text-sm text-white disabled:opacity-40">Preview PDF</button>
-          <button disabled={!invoice.pdfKey} onClick={() => { if (invoice.pdfKey) void openSignedUpload(token, invoice.pdfKey, true, `${invoice.invoiceNumber}.pdf`); }} className="rounded-md border border-tower-border px-4 py-2 text-sm text-white disabled:opacity-40">Download PDF</button>
+          <button disabled={!invoice.pdfKey && !invoice.pdfPath} onClick={() => openInvoicePdf(invoice, token, false)} className="rounded-md border border-tower-border px-4 py-2 text-sm text-white disabled:opacity-40">Preview PDF</button>
+          <button disabled={!invoice.pdfKey && !invoice.pdfPath} onClick={() => openInvoicePdf(invoice, token, true)} className="rounded-md border border-tower-border px-4 py-2 text-sm text-white disabled:opacity-40">Download PDF</button>
           <button onClick={async () => { await regenerateInvoiceApi(token, invoice.id); await refreshData(); }} className="rounded-md bg-tower-primary px-4 py-2 text-sm font-medium text-white">Regenerate PDF</button>
           <button className="rounded-md border border-tower-border px-4 py-2 text-sm text-white">Send via WhatsApp</button>
           <button onClick={() => { void onDelete(); }} className="rounded-md border border-tower-danger/50 bg-tower-danger/10 px-4 py-2 text-sm text-red-200">Delete Invoice</button>
@@ -5491,10 +5548,21 @@ function AddCustomerModal({ customer, onClose, onSave }: { customer?: Customer; 
   const [error, setError] = useState("");
   const save = async () => {
     setError("");
-    if (!name.trim() || !phone.trim()) return;
+    const trimmed = {
+      name: name.trim(),
+      gstNumber: gstNumber.trim(),
+      contactPerson: contactPerson.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim()
+    };
+    if (!trimmed.name) return setError("Customer name is required.");
+    if (trimmed.gstNumber.length < 2) return setError("GST number is required.");
+    if (trimmed.address.length < 2) return setError("Billing address is required.");
+    if (trimmed.phone.length < 6) return setError("Mobile number must be at least 6 digits.");
     setSaving(true);
     try {
-      await onSave({ id: customer?.id || `customer-${Date.now()}`, name, gstNumber, contactPerson, phone, email, address, locations });
+      await onSave({ id: customer?.id || `customer-${Date.now()}`, ...trimmed, email: trimmed.email, locations });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Customer could not be saved.");
     } finally {
@@ -5515,7 +5583,7 @@ function AddCustomerModal({ customer, onClose, onSave }: { customer?: Customer; 
       <div className="mt-5">
         <CustomerLocationsPanel locations={locations} onChange={setLocations} compact />
       </div>
-      <ModalActions onClose={onClose} onSave={() => { void save(); }} disabled={!name.trim() || !phone.trim() || saving} label={saving ? "Saving..." : "Save Customer"} />
+      <ModalActions onClose={onClose} onSave={() => { void save(); }} disabled={saving} label={saving ? "Saving..." : "Save Customer"} />
     </ModalShell>
   );
 }
@@ -5946,12 +6014,12 @@ function formatDisplayDate(value: string) {
 
 function customerToCompanyPayload(customer: Customer) {
   return {
-    companyName: customer.name,
-    gstNumber: customer.gstNumber || "NA",
-    address: customer.address || "NA",
-    contactPerson: customer.contactPerson,
-    phone: customer.phone,
-    email: customer.email || undefined,
+    companyName: customer.name.trim(),
+    gstNumber: customer.gstNumber.trim(),
+    address: customer.address.trim(),
+    contactPerson: customer.contactPerson?.trim(),
+    phone: customer.phone.trim(),
+    email: customer.email?.trim() || undefined,
     locations: customer.locations || []
   };
 }
@@ -6083,7 +6151,7 @@ function normalizeTripStatus(status: string) {
 
 function normalizePaymentStatus(status: string, outstanding: number): "Pending" | "Partial" | "Paid" {
   if (status === "Paid" || outstanding <= 0) return "Paid";
-  if (status === "Partial") return "Partial";
+  if (status === "Partial" || status === "Partially Paid") return "Partial";
   return "Pending";
 }
 
@@ -6169,6 +6237,13 @@ function toDateInput(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function dateInputValue(value: string | undefined, fallback = "") {
+  if (!value) return fallback;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : toDateInput(date);
 }
 
 function getDateRange(preset: string, customFrom: string, customTo: string) {

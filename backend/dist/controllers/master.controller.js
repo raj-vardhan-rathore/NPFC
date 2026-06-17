@@ -47,7 +47,7 @@ export const listVehicles = asyncHandler(async (_req, res) => {
             number: vehicle.vehicleNumber,
             type: vehicle.type || "Truck",
             status: (summary.activeRepairs || 0) > 0 ? "Maintenance" : "Available",
-            pucExpiry: vehicle.pucExpiry || vehicle.fitnessExpiry,
+            pucExpiry: vehicle.pucExpiry,
             serviceDue: summary.nextServiceDate ? toDateString(summary.nextServiceDate) : toDateString(vehicle.fitnessExpiry),
             totalMaintenanceCost: summary.totalMaintenanceCost || 0,
             lastServiceDate: summary.lastServiceDate ? toDateString(summary.lastServiceDate) : "",

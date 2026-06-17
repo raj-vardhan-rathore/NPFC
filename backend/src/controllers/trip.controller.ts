@@ -171,9 +171,9 @@ function toLegacyVehicle(vehicle: any) {
     ...vehicle,
     id: String(vehicle._id),
     number: vehicle.vehicleNumber,
-    type: "Truck",
+    type: vehicle.type || "Truck",
     status: "Available",
-    pucExpiry: vehicle.fitnessExpiry,
+    pucExpiry: vehicle.pucExpiry,
     serviceDue: vehicle.fitnessExpiry
   };
 }

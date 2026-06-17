@@ -84,7 +84,7 @@ api.post("/attendance", requireWriteAccess("Operations"), validate(attendanceSch
 api.patch("/attendance/:id", requireWriteAccess("Operations"), validate(attendanceUpdateSchema), updateAttendance);
 api.delete("/attendance/:id", requireWriteAccess("Operations"), deleteAttendance);
 api.get("/invoices", requireRole(...roleMatrix.readOnly), listInvoices);
-api.post("/invoices/generate", requireWriteAccess("Accountant"), validate(invoiceGenerateSchema), generateInvoice);
+api.post("/invoices/generate", requireWriteAccess("Operations", "Accountant"), validate(invoiceGenerateSchema), generateInvoice);
 api.patch("/invoices/:id", requireWriteAccess("Accountant"), validate(invoiceUpdateSchema), updateInvoice);
 api.post("/invoices/:id/regenerate", requireWriteAccess("Accountant"), regenerateInvoice);
 api.delete("/invoices/:id", requireWriteAccess("Accountant"), deleteInvoice);

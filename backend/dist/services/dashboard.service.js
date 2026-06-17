@@ -31,11 +31,12 @@ export async function getSaasDashboard() {
         PaymentModel.countDocuments(),
         ManualExpenseModel.find().lean()
     ]);
+    const paidByInvoice = invoicePaidMap(collectedRows);
     const amountCollectedThisMonth = collectedRows.reduce((sum, payment) => sum + Number(payment.amountReceived ?? payment.amount ?? 0), 0);
     const revenue = freightRows[0]?.total || 0;
     const manualExpenses = manualExpenseRows.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
     const expenses = (expenseRows[0]?.total || 0) + manualExpenses;
-    const pendingPayments = pendingInvoiceRows.reduce((sum, invoice) => sum + Number(invoice.invoiceAmount || 0), 0);
+    const pendingPayments = pendingInvoiceRows.reduce((sum, invoice) => sum + Math.max(Number(invoice.invoiceAmount || 0) - (paidByInvoice.get(String(invoice._id)) || 0), 0), 0);
     const outstanding = pendingPayments;
     const monthlyRevenue = groupMonthly(deliveredTrips ? await TripModel.find().select("loadingDate freightAmount").lean() : [], "loadingDate", "freightAmount");
     const monthlyExpense = groupMonthly([
@@ -77,7 +78,7 @@ export async function getSaasDashboard() {
             ...invoice,
             id: String(invoice._id),
             amount: invoice.invoiceAmount,
-            outstandingAmount: invoice.invoiceAmount,
+            outstandingAmount: Math.max(Number(invoice.invoiceAmount || 0) - (paidByInvoice.get(String(invoice._id)) || 0), 0),
             status: invoice.paymentStatus
         })),
         revenueAnalytics: monthlyRevenue.map((row) => {
@@ -92,6 +93,24 @@ export async function getSaasDashboard() {
             expiredDrivers: driverLicensesExpired
         }
     };
+}
+function invoicePaidMap(payments) {
+    return payments.reduce((map, payment) => {
+        if (payment.direction === "Outgoing" || payment.category !== "Invoice Payment" || payment.status === "Cancelled")
+            return map;
+        if (payment.allocations?.length) {
+            for (const allocation of payment.allocations) {
+                const key = String(allocation.invoiceId);
+                map.set(key, (map.get(key) || 0) + Number(allocation.amount || 0));
+            }
+            return map;
+        }
+        if (payment.invoiceId) {
+            const key = String(payment.invoiceId);
+            map.set(key, (map.get(key) || 0) + Number(payment.amountReceived ?? payment.amount ?? 0));
+        }
+        return map;
+    }, new Map());
 }
 async function tripExpenseTimeline() {
     const rows = await TripModel.find().select("loadingDate expenses").lean();

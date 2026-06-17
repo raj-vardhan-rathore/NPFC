@@ -77,7 +77,7 @@ export async function createInvoiceForTrip(tripId: string, user = "System") {
   const trip = await TripModel.findById(tripId);
   if (!trip) throw new HttpError(404, "Trip not found.");
   const existing = await InvoiceModel.findOne({ tripId: trip._id });
-  if (existing) return existing;
+  if (existing) return finalizeInvoiceForTrip(trip, existing, user);
 
   const invoice = await InvoiceModel.create({
     invoiceNumber: await nextInvoiceNumber(new Date(trip.loadingDate)),
@@ -88,12 +88,16 @@ export async function createInvoiceForTrip(tripId: string, user = "System") {
   });
   trip.invoiceId = invoice._id;
   await trip.save();
-  return uploadInvoicePdf(invoice);
+  return finalizeInvoiceForTrip(trip, invoice, user);
 }
 
 export async function syncInvoiceForTrip(tripId: string, user = "System") {
   const trip = await TripModel.findById(tripId);
-  if (!trip?.invoiceId) return;
+  if (!trip) return;
+  if (!trip.invoiceId) {
+    if (trip.status === "Payment Received") return createInvoiceForTrip(tripId, user);
+    return;
+  }
   const invoice = await InvoiceModel.findById(trip.invoiceId);
   if (!invoice || invoice.paymentStatus === "Cancelled") return;
 
@@ -106,15 +110,25 @@ export async function syncInvoiceForTrip(tripId: string, user = "System") {
   return uploadInvoicePdf(invoice);
 }
 
+async function finalizeInvoiceForTrip(trip: any, invoice: any, user: string) {
+  if (trip.status === "Payment Received" && invoice.paymentStatus !== "Cancelled") {
+    await reconcileTripPayment(trip, invoice, user);
+    const paid = await invoicePaidAmount(String(invoice._id));
+    invoice.paymentStatus = paid >= invoice.invoiceAmount ? "Paid" : paid > 0 ? "Partially Paid" : "Generated";
+    await invoice.save();
+  }
+  return uploadInvoicePdf(invoice);
+}
+
 async function reconcileTripPayment(trip: any, invoice: any, user: string) {
   const referenceNumber = `TRIP-${String(trip._id)}-PAID`;
   if (trip.status !== "Payment Received") {
-    await PaymentModel.deleteMany({ referenceNumber, createdBy: "System" });
+    await PaymentModel.deleteMany({ referenceNumber });
     return;
   }
 
   const invoiceAmount = Number(trip.freightAmount || 0) + Number(invoice.additionalCharges || 0);
-  const existingSystemPayment = await PaymentModel.findOne({ referenceNumber, createdBy: "System" });
+  const existingSystemPayment = await PaymentModel.findOne({ referenceNumber });
   const paidWithoutSystem = Math.max((await invoicePaidAmount(String(invoice._id))) - Number(existingSystemPayment?.amount || 0), 0);
   const balance = Math.max(invoiceAmount - paidWithoutSystem, 0);
 
