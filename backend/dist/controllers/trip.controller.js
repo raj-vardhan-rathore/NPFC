@@ -6,9 +6,16 @@ import { TripModel } from "../models/Trip.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { syncInvoiceForTrip } from "../services/invoice.service.js";
-export const listTrips = asyncHandler(async (_req, res) => {
+export const listTrips = asyncHandler(async (req, res) => {
     assertDatabase();
-    const rows = await TripModel.find().populate("companyId vehicleId driverId invoiceId").sort({ loadingDate: -1 }).lean();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const [rows, total] = await Promise.all([
+        TripModel.find().populate("companyId vehicleId driverId invoiceId").sort({ loadingDate: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+        TripModel.estimatedDocumentCount()
+    ]);
+    res.setHeader("X-Total-Count", String(total));
+    res.setHeader("X-Page", String(page));
     res.json(rows.map(toLegacyTrip));
 });
 export const createTrip = asyncHandler(async (req, res) => {
@@ -20,7 +27,13 @@ export const updateTrip = asyncHandler(async (req, res) => {
     assertDatabase();
     if (req.body.tripId)
         await assertUniqueTripId(req.body.tripId, String(req.params.id));
-    const trip = await TripModel.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const existing = await TripModel.findById(req.params.id);
+    if (!existing)
+        throw new HttpError(404, "Trip not found.");
+    const update = { ...req.body };
+    if (req.body.status && req.body.status !== existing.status)
+        applyStatusTimestamp(update, req.body.status);
+    const trip = await TripModel.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     if (!trip)
         throw new HttpError(404, "Trip not found.");
     await syncInvoiceForTrip(String(trip._id), req.user?.name || "System");
@@ -37,7 +50,7 @@ export const deleteTrip = asyncHandler(async (req, res) => {
 });
 export const listRoutes = asyncHandler(async (_req, res) => {
     assertDatabase();
-    const rows = await TripModel.find({ status: { $in: ["Delivered", "Completed", "In Transit"] } }).populate("companyId vehicleId").lean();
+    const rows = await TripModel.find({ status: { $in: ["Delivered", "Completed", "In Transit"] } }).populate("companyId vehicleId").sort({ loadingDate: -1 }).limit(500).lean();
     res.json(rows.map((trip) => {
         const vehicle = toLegacyVehicle(trip.vehicleId);
         const customer = toLegacyCustomer(trip.companyId);
@@ -75,7 +88,7 @@ function toLegacyTrip(trip) {
         driver,
         loadingPoint: trip.source,
         unloadingPoint: trip.destination,
-        items: trip.material ? [{ id: `${trip._id}-item-1`, item: trip.material, weight: Number(trip.weightMt || 0), rate: Number(trip.ratePerMt || 0) }] : undefined,
+        items: trip.destinations?.length ? trip.destinations.map((row) => ({ id: String(row._id), item: row.material, weight: Number(row.weightMt || 0), rate: Number(row.ratePerMt || 0), loadingLocation: row.loadingLocation, unloadingLocation: row.unloadingLocation, consignorId: String(row.consignorId || ""), consigneeId: String(row.consigneeId || ""), payeeId: String(row.payeeId || "") })) : trip.material ? [{ id: `${trip._id}-item-1`, item: trip.material, weight: Number(trip.weightMt || 0), rate: Number(trip.ratePerMt || 0) }] : undefined,
         distanceKm: 0,
         advance: 0,
         dieselExpense: 0,
@@ -86,6 +99,19 @@ function toLegacyTrip(trip) {
         totalExpense,
         profit: trip.freightAmount - totalExpense
     };
+}
+function applyStatusTimestamp(update, status) {
+    const now = new Date();
+    if (status === "Loading Started")
+        update.loadingStartedAt = now;
+    if (status === "In Transit")
+        update.transitStartedAt = now;
+    if (status === "Unloading Started")
+        update.unloadingStartedAt = now;
+    if (status === "Delivered") {
+        update.deliveredAt = now;
+        update.deliveryDate ||= now;
+    }
 }
 function assertDatabase() {
     if (!isDatabaseConnected())

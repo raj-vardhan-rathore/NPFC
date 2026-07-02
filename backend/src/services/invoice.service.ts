@@ -9,6 +9,9 @@ import { deleteFromS3, uploadToS3 } from "./storage.service.js";
 import { HttpError } from "../utils/httpError.js";
 import { CompanySettingsService, SettingsService } from "./settings.service.js";
 
+let browserPromise: ReturnType<typeof puppeteer.launch> | undefined;
+const getPdfBrowser = () => (browserPromise ||= puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] }));
+
 export async function nextInvoiceNumber(date = new Date()) {
   const year = date.getFullYear();
   const settings = await SettingsService.getSettings();
@@ -25,13 +28,13 @@ export async function generateInvoicePdf(invoice: any) {
 
   const paid = await invoicePaidAmount(String(invoice._id));
   const html = await renderInvoiceHtml(invoice, trip, paid);
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await getPdfBrowser();
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     return Buffer.from(await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true }));
   } finally {
-    await browser.close();
+    await page.close();
   }
 }
 
@@ -79,13 +82,18 @@ export async function createInvoiceForTrip(tripId: string, user = "System") {
   const existing = await InvoiceModel.findOne({ tripId: trip._id });
   if (existing) return finalizeInvoiceForTrip(trip, existing, user);
 
-  const invoice = await InvoiceModel.create({
-    invoiceNumber: await nextInvoiceNumber(new Date(trip.loadingDate)),
-    tripId: trip._id,
-    invoiceAmount: trip.freightAmount,
-    paymentStatus: "Generated",
-    activityLog: [{ dateTime: new Date(), user, action: "Invoice Generated", remarks: `Generated from trip ${trip.tripId}.` }]
-  });
+  let invoice;
+  try {
+    invoice = await InvoiceModel.create({
+      invoiceNumber: await nextInvoiceNumber(new Date(trip.loadingDate)), tripId: trip._id,
+      invoiceAmount: trip.freightAmount, paymentStatus: "Generated",
+      activityLog: [{ dateTime: new Date(), user, action: "Invoice Generated", remarks: `Generated from trip ${trip.tripId}.` }]
+    });
+  } catch (error: any) {
+    if (error?.code !== 11000) throw error;
+    invoice = await InvoiceModel.findOne({ tripId: trip._id });
+    if (!invoice) throw error;
+  }
   trip.invoiceId = invoice._id;
   await trip.save();
   return finalizeInvoiceForTrip(trip, invoice, user);
@@ -197,6 +205,10 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
   const invoiceDate = invoice.createdAt ? new Date(invoice.createdAt) : new Date();
   const deliveryDate = trip.deliveryDate ? new Date(trip.deliveryDate) : undefined;
+  const destinations = trip.destinations?.length ? trip.destinations : [{ loadingLocation: trip.source, unloadingLocation: trip.destination, material, weightMt, ratePerMt, freightAmount: totalFreight }];
+  const consignors = trip.consignors?.length ? trip.consignors : [{ name: customer.companyName, address: customer.address, gstNumber: customer.gstNumber }];
+  const consignees = trip.consignees?.length ? trip.consignees : [{ name: customer.companyName, address: customer.address, gstNumber: customer.gstNumber }];
+  const timing = timingDetails(trip);
 
   return `<!doctype html>
   <html lang="en">
@@ -214,7 +226,7 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
           margin: 0 auto;
           border: 1px solid #000000;
           display: grid;
-          grid-template-rows: 100px 135px 135px 60px 115px 75px 175px 95px 90px 60px 22px;
+          grid-template-rows: 100px 135px 135px 60px 95px 95px 175px 95px 90px 60px 22px;
           overflow: hidden;
           page-break-after: avoid;
           page-break-inside: avoid;
@@ -333,7 +345,6 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
 
         <section class="company-meta">
           <div class="company-address">
-            <div class="blue-name">${escapeHtml(company.companyName)}</div>
             <div class="line">${escapeHtml(company.addressLine1)}</div>
             <div class="line">${escapeHtml(company.addressLine2)}</div>
             <div class="line">${escapeHtml([company.city, company.state, company.pincode].filter(Boolean).join(" - "))}</div>
@@ -348,7 +359,6 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
             ${kv("Trip Number", trip.tripId)}
             ${kv("Vehicle Number", vehicle.vehicleNumber || "")}
             ${kv("Delivery Note No.", `DN/${trip.tripId || "____"}`)}
-            ${kv("Reference No. & Date", invoice.remarks || "PO/____ dt. ____")}
             ${kv("Dispatched Through", "NPFC Fleet")}
             ${kv("Place of Receipt", trip.source)}
             ${kv("Place of Delivery", trip.destination)}
@@ -358,17 +368,17 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
         <section class="parties">
           <div class="party">
             <div class="box-title">CONSIGNOR (From)</div>
-            ${kv("Company Name", "M/s. ____________________", "Company Name")}
-            ${kv("Address", "____________________________", "Address", "address-row")}
-            ${kv("GSTIN/UIN", "________________")}
+            ${kv("Company Name", consignors.map((row: any) => row.name).join("; "), "Company Name")}
+            ${kv("Address", consignors.map((row: any) => row.address).filter(Boolean).join("; "), "Address", "address-row")}
+            ${kv("GSTIN/UIN", consignors.map((row: any) => row.gstNumber).filter(Boolean).join(", "))}
             ${kv("Contact Person", "________________")}
             ${kv("Contact No.", "________________")}
           </div>
           <div class="party">
             <div class="box-title">CONSIGNEE (To)</div>
-            ${kv("Company Name", customer.companyName, "Company Name")}
-            ${kv("Address", customer.address, "Address", "address-row")}
-            ${kv("GSTIN/UIN", customer.gstNumber)}
+            ${kv("Company Name", consignees.map((row: any) => row.name).join("; "), "Company Name")}
+            ${kv("Address", consignees.map((row: any) => row.address).filter(Boolean).join("; "), "Address", "address-row")}
+            ${kv("GSTIN/UIN", consignees.map((row: any) => row.gstNumber).filter(Boolean).join(", "))}
             ${kv("Contact Person", customer.contactPerson || "________________")}
             ${kv("Contact No.", customer.phone || "________________")}
           </div>
@@ -388,15 +398,17 @@ export async function renderInvoiceHtml(invoice: any, trip: any, paidAmount: num
           <div class="section-title">TRIP DETAILS</div>
           <div class="trip-grid">
             ${th("Vehicle Number")}${th("Source")}${th("Destination")}${th("Material")}${th("Weight (MT)")}${th("Rate Per MT")}${th("Total Freight")}
-            ${td(vehicle.vehicleNumber || "________________")}${td(trip.source || "________________")}${td(trip.destination || "________________")}${td(material)}${td(formatQuantity(weightMt))}${td(`₹ ${formatMoney(ratePerMt)}`)}${td(`₹ ${formatMoney(totalFreight)}`)}
+            ${destinations.map((row: any) => `${td(vehicle.vehicleNumber || "________________")}${td(row.loadingLocation)}${td(row.unloadingLocation)}${td(row.material)}${td(formatQuantity(row.weightMt))}${td(`INR ${formatMoney(row.ratePerMt)}`)}${td(`INR ${formatMoney(row.freightAmount)}`)}`).join("")}
           </div>
         </section>
 
         <section class="timing">
           <div class="section-title">TIMING DETAILS</div>
           <div class="timing-grid">
-            ${th("Arrival Time")}${th("Departure Time")}${th("Total Halt Time")}${th("Delivery Time")}
-            ${td(formatDate(trip.loadingDate))}${td("________________")}${td("________________")}${td(deliveryDate ? formatDate(deliveryDate) : "________________")}
+            ${th("Notification Sent")}${th("Loading Start")}${th("Transit Start")}${th("Unloading Start")}
+            ${td(formatDateTime(trip.notificationSentAt))}${td(formatDateTime(trip.loadingStartedAt))}${td(formatDateTime(trip.transitStartedAt))}${td(formatDateTime(trip.unloadingStartedAt))}
+            ${th("Delivery Time")}${th("Loading Halt")}${th("Unloading Halt")}${th("Trip / Total Halt")}
+            ${td(formatDateTime(trip.deliveredAt || deliveryDate))}${td(timing.loadingHalt)}${td(timing.unloadingHalt)}${td(`${timing.totalTrip} / ${timing.totalHalt}`)}
           </div>
         </section>
 
@@ -514,6 +526,25 @@ function formatDate(value: unknown) {
   const date = new Date(value as string);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatDateTime(value: unknown) {
+  if (!value) return "Not recorded";
+  const date = new Date(value as string);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function timingDetails(trip: any) {
+  const duration = (start: unknown, end: unknown) => {
+    if (!start || !end) return 0;
+    return Math.max(new Date(end as string).getTime() - new Date(start as string).getTime(), 0);
+  };
+  const loading = duration(trip.loadingStartedAt, trip.transitStartedAt);
+  const unloading = duration(trip.unloadingStartedAt, trip.deliveredAt || trip.deliveryDate);
+  const tripDuration = duration(trip.notificationSentAt, trip.deliveredAt || trip.deliveryDate);
+  const text = (ms: number) => ms ? `${Math.floor(ms / 3_600_000)}h ${Math.floor((ms % 3_600_000) / 60_000)}m` : "Not recorded";
+  return { loadingHalt: text(loading), unloadingHalt: text(unloading), totalHalt: text(loading + unloading), totalTrip: text(tripDuration) };
 }
 
 function formatMoney(value: number) {

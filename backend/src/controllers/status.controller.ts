@@ -5,8 +5,12 @@ import { isDatabaseConnected } from "../config/database.js";
 
 export const sendTripStatusUpdate = asyncHandler(async (req, res) => {
   assertDatabase();
-  const trip = await TripModel.findById(req.params.id).populate("companyId driverId vehicleId").lean();
+  const trip = await TripModel.findById(req.params.id).populate("companyId driverId vehicleId");
   if (!trip) throw new HttpError(404, "Trip not found.");
+  if (!trip.notificationSentAt) {
+    trip.notificationSentAt = new Date();
+    await trip.save();
+  }
   res.json({
     ok: true,
     message: "Status update queued successfully.",

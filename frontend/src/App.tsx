@@ -177,21 +177,33 @@ function Login() {
 
 function Shell() {
   const { token, user, logout } = useSession();
-  const [active, setActive] = useState("Dashboard");
+  const [active, setActiveState] = useState(() => pageFromPath(window.location.pathname));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const cachedData = useMemo(() => readDataCache(), []);
   const [data, setData] = useState<Data>(cachedData || { trips: [], routes: [], vehicles: [], drivers: [], customers: [], invoices: [], payments: [], bilties: [], driverTransactions: [], attendance: [] });
   const [loading, setLoading] = useState(!cachedData);
+  const setActive = useCallback((page: string, replace = false) => {
+    const path = pathForPage(page);
+    if (window.location.pathname !== path) window.history[replace ? "replaceState" : "pushState"]({ page }, "", path);
+    setActiveState(page);
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => setActiveState(pageFromPath(window.location.pathname));
+    window.addEventListener("popstate", onPopState);
+    if (window.location.pathname === "/") setActive("Dashboard", true);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [setActive]);
 
   const refreshData = useCallback(async () => {
     const [dashboard, trips, routes, vehicles, drivers, customers, invoices, payments, bilties, attendance] = await Promise.all([
       api<DashboardData>("/api/dashboard", token),
-      api<Trip[]>("/api/trips", token),
+      api<Trip[]>("/api/trips?limit=500", token),
       api<RouteOverlay[]>("/api/routes", token),
       api<Vehicle[]>("/api/vehicles", token),
       api<Driver[]>("/api/drivers", token),
       api<Customer[]>("/api/customers", token),
-      api<Invoice[]>("/api/invoices", token),
+      api<Invoice[]>("/api/invoices?limit=500", token),
       api<Payment[]>("/api/payments", token),
       getBilties(token).catch(() => []),
       listAttendance(token).catch(() => [])
@@ -2736,6 +2748,13 @@ function ExpensesModule({ vehicles, drivers, customers, token }: { vehicles: Veh
   );
 }
 
+const pageSlug = (label: string) => label.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const pathForPage = (page: string) => `/app/${pageSlug(page)}`;
+function pageFromPath(path: string) {
+  const slug = path.replace(/^\/app\//, "").replace(/\/$/, "");
+  return navigation.find((item) => pageSlug(item.label) === slug)?.label || "Dashboard";
+}
+
 const chartTooltipStyle = { background: "#0F172A", border: "1px solid #263247", borderRadius: 8, color: "#fff" };
 
 function ChartFrame({ children }: { children: React.ReactNode }) {
@@ -2913,7 +2932,7 @@ function EditManualExpenseModal({ expense, onClose, onSave }: { expense: Expense
   );
 }
 
-type TripItem = { id: string; item: string; weight: number; rate: number };
+type TripItem = { id: string; item: string; weight: number; rate: number; consignorId?: string; consigneeId?: string; payeeId?: string; loadingLocation?: string; unloadingLocation?: string };
 type LocalTrip = Trip & { items?: TripItem[]; payer?: "Consigner" | "Consignee"; invoiceStatus?: "Not Generated" | "Generated" | "Sent"; paymentStatus?: "Pending" | "Partial" | "Paid" };
 type DriverProfile = Driver & {
   alternateMobile?: string;
@@ -2954,7 +2973,7 @@ type DriverTransaction = {
 };
 
 const workflow = ["Trip Created", "Vehicle Assigned", "Loading Started", "Loaded", "In Transit", "Reached Destination", "Unloading Started", "Delivered", "Invoice Generated", "Payment Received"];
-const itemOptions = ["Steel", "Cement", "Rice", "FMCG", "Machinery", "Textiles", "Auto Parts"];
+const itemOptions = ["HR Sheet", "CR Sheet", "GP Sheet", "GI Sheet", "Steel Coil", "Slit Coil", "TMT Bars", "Billets", "Angles", "Channels", "Pipes", "HMS Scrap", "MS Scrap", "Metal Scrap", "Industrial Scrap", "Cement", "Sand", "Fly Ash", "Aggregate"];
 const driverStatuses = ["Available", "Assigned", "On Trip", "Leave", "Inactive"];
 const driverDocumentTypes = ["Driving License", "Aadhaar Card", "PAN Card", "Driver Photo", "Other"];
 const driverExpenseTypes = ["Food", "Driver Advance", "Emergency Cash", "Night Halt", "Other"];
@@ -3254,6 +3273,7 @@ function TripsModule({ trips, customers, vehicles, drivers, invoices, bilties, d
     updateTrip(trip.id, { status: next, paymentStatus: next === "Payment Received" ? "Paid" : trip.paymentStatus });
     openWhatsAppStatusDraft(trip, next);
     if (!trip.id.startsWith("local-")) {
+      await sendStatusUpdate(token, trip.id, next);
       await updateTripApi(token, trip.id, { status: backendTripStatus(next) });
       await refreshData();
       return;
@@ -3301,7 +3321,16 @@ function TripsModule({ trips, customers, vehicles, drivers, invoices, bilties, d
         token={token}
         onBack={() => setSelectedTripId(undefined)}
         onWorkflow={(status) => { void advanceWorkflow(selectedTrip, status); }}
-        onGenerateInvoice={() => setInvoiceTripId(selectedTrip.id)}
+        onGenerateInvoice={async () => {
+          try {
+            const created = await generateInvoiceApi(token, selectedTrip.id);
+            await refreshData();
+            const preview = { ...created, pdfPath: created.pdfPath || (created as Invoice & { pdfUrl?: string }).pdfUrl };
+            if (preview.pdfKey || preview.pdfPath) openInvoicePdf(preview, token, false);
+          } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Invoice could not be generated.");
+          }
+        }}
         onPaymentStatus={async (status, amountReceived) => {
           if (!selectedTrip.id.startsWith("local-")) {
             const linkedInvoice = localInvoices.find((invoice) => invoice.tripId === selectedTrip.id);
@@ -3466,7 +3495,7 @@ function AddTripModal({ trip, customers, vehicles, drivers, nextTripNumber, onCl
   const [consigneeLocationId, setConsigneeLocationId] = useState("temporary");
   const [temporaryLoading, setTemporaryLoading] = useState(trip?.loadingPoint || "");
   const [temporaryUnloading, setTemporaryUnloading] = useState(trip?.unloadingPoint || "");
-  const [items, setItems] = useState<TripItem[]>(trip?.items?.length ? trip.items : [{ id: "item-1", item: itemOptions[0], weight: 0, rate: 0 }]);
+  const [items, setItems] = useState<TripItem[]>(trip?.items?.length ? trip.items : [{ id: "item-1", item: itemOptions[0], weight: 0, rate: 0, consignorId: consignerId, consigneeId, payeeId: consignerId, loadingLocation: temporaryLoading, unloadingLocation: temporaryUnloading }]);
   const [remarks, setRemarks] = useState(trip?.remarks || "");
 
   const consigner = customers.find((customer) => customer.id === consignerId) || customers[0];
@@ -3517,7 +3546,15 @@ function AddTripModal({ trip, customers, vehicles, drivers, nextTripNumber, onCl
       items,
       payer,
       invoiceStatus: "Not Generated",
-      paymentStatus: "Pending"
+      paymentStatus: "Pending",
+      consignors: Array.from(new Set(items.map((item) => item.consignorId).filter(Boolean))).map((id) => {
+        const row = customers.find((customer) => customer.id === id)!;
+        return { companyId: row.id, name: row.name, address: row.address, gstNumber: row.gstNumber, contactNumber: row.phone };
+      }),
+      consignees: Array.from(new Set(items.map((item) => item.consigneeId).filter(Boolean))).map((id) => {
+        const row = customers.find((customer) => customer.id === id)!;
+        return { companyId: row.id, name: row.name, address: row.address, gstNumber: row.gstNumber, contactNumber: row.phone };
+      })
     });
   };
 
@@ -3581,12 +3618,17 @@ function AddTripModal({ trip, customers, vehicles, drivers, nextTripNumber, onCl
           <section className="rounded-lg border border-tower-border bg-[#0B1220] p-4">
             <div className="mb-4 flex items-center justify-between">
               <h4 className="font-medium">Freight Details</h4>
-              <button onClick={() => setItems((rows) => [...rows, { id: `item-${Date.now()}`, item: itemOptions[0], weight: 0, rate: 0 }])} className="rounded-md border border-tower-border px-3 py-2 text-sm hover:border-tower-primary/60">Add Item</button>
+              <button onClick={() => setItems((rows) => [...rows, { id: `item-${Date.now()}`, item: itemOptions[0], weight: 0, rate: 0, consignorId: consignerId, consigneeId, payeeId: payer === "Consigner" ? consignerId : consigneeId, loadingLocation: consignerLocation?.address || temporaryLoading, unloadingLocation: consigneeLocation?.address || temporaryUnloading }])} className="rounded-md border border-tower-border px-3 py-2 text-sm hover:border-tower-primary/60">Add Destination</button>
             </div>
             <div className="space-y-3">
               {items.map((row, index) => (
-                <div key={row.id} className="grid gap-3 rounded-md border border-tower-border bg-tower-card p-3 lg:grid-cols-[1.2fr_0.7fr_0.7fr_0.8fr_auto]">
-                  <FieldSelect label={`Item ${index + 1}`} value={row.item} onChange={(value) => updateItem(row.id, { item: value })} options={itemOptions.map((item) => ({ label: item, value: item }))} />
+                <div key={row.id} className="grid gap-3 rounded-md border border-tower-border bg-tower-card p-3 md:grid-cols-2 xl:grid-cols-4">
+                  <TextField label={`Material ${index + 1} (select or type custom)`} value={row.item} onChange={(value) => updateItem(row.id, { item: value })} />
+                  <FieldSelect label="Consignor" value={row.consignorId || consignerId} onChange={(value) => updateItem(row.id, { consignorId: value })} options={customers.map((item) => ({ label: item.name, value: item.id }))} />
+                  <FieldSelect label="Consignee" value={row.consigneeId || consigneeId} onChange={(value) => updateItem(row.id, { consigneeId: value })} options={customers.map((item) => ({ label: item.name, value: item.id }))} />
+                  <FieldSelect label="Payee" value={row.payeeId || consignerId} onChange={(value) => updateItem(row.id, { payeeId: value })} options={customers.map((item) => ({ label: item.name, value: item.id }))} />
+                  <TextField label="Loading Location" value={row.loadingLocation || temporaryLoading} onChange={(value) => updateItem(row.id, { loadingLocation: value })} />
+                  <TextField label="Unloading Location" value={row.unloadingLocation || temporaryUnloading} onChange={(value) => updateItem(row.id, { unloadingLocation: value })} />
                   <NumberField label="Weight (MT)" value={row.weight} onChange={(value) => updateItem(row.id, { weight: value })} />
                   <NumberField label="Rate Per MT" value={row.rate} onChange={(value) => updateItem(row.id, { rate: value })} />
                   <ReadOnlyField label="Freight Amount" value={money(row.weight * row.rate)} />
@@ -6028,6 +6070,13 @@ function tripToPayload(trip: LocalTrip) {
   const totalWeight = (trip.items || []).reduce((sum, item) => sum + Number(item.weight || 0), 0);
   const ratePerMt = totalWeight ? trip.freightAmount / totalWeight : 0;
   const firstItem = trip.items?.[0];
+  const destinations = (trip.items || []).map((item) => ({
+    consignorId: item.consignorId, consigneeId: item.consigneeId,
+    loadingLocation: item.loadingLocation || trip.loadingPoint, unloadingLocation: item.unloadingLocation || trip.unloadingPoint,
+    material: item.item, weightMt: Number(item.weight || 0), ratePerMt: Number(item.rate || 0),
+    freightAmount: Number(item.weight || 0) * Number(item.rate || 0), payeeId: item.payeeId || trip.customerId
+  }));
+  const party = (name?: string, address?: string, gstNumber?: string, companyId?: string) => ({ companyId, name: name || "Unknown", address, gstNumber });
   return {
     tripId: trip.tripNumber,
     companyId: trip.customerId,
@@ -6047,7 +6096,10 @@ function tripToPayload(trip: LocalTrip) {
       { type: "Loading", amount: trip.loadingExpense || 0 },
       { type: "Unloading", amount: trip.unloadingExpense || 0 },
       { type: "Other", amount: trip.otherExpense || 0, remarks: trip.remarks }
-    ].filter((expense) => expense.amount > 0)
+    ].filter((expense) => expense.amount > 0),
+    consignors: trip.consignors?.length ? trip.consignors : [party(trip.consignorName, trip.consignorAddress, trip.consignorGst, destinations[0]?.consignorId)],
+    consignees: trip.consignees?.length ? trip.consignees : [party(trip.consigneeName, trip.consigneeAddress, trip.consigneeGst, destinations[0]?.consigneeId)],
+    destinations
   };
 }
 

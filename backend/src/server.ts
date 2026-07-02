@@ -54,14 +54,14 @@ import { bootstrapDefaultAdmin } from "./services/admin-bootstrap.service.js";
 const app = express();
 
 app.use(helmet());
-app.set("etag", false);
+app.set("etag", "strong");
 app.use(cors({ origin: env.frontendUrl, credentials: true }));
 app.use(rateLimit());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 app.use("/storage", express.static(path.resolve(process.cwd(), "..", "storage")));
 app.use((_req, res, next) => {
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", _req.method === "GET" ? "private, max-age=15, stale-while-revalidate=45" : "no-store");
   next();
 });
 

@@ -6,9 +6,16 @@ import { TripModel } from "../models/Trip.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { createInvoiceForTrip, uploadInvoicePdf } from "../services/invoice.service.js";
-export const listInvoices = asyncHandler(async (_req, res) => {
+export const listInvoices = asyncHandler(async (req, res) => {
     assertDatabase();
-    const rows = await InvoiceModel.find().populate({ path: "tripId", populate: "companyId vehicleId driverId" }).sort({ createdAt: -1 }).lean();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const [rows, total] = await Promise.all([
+        InvoiceModel.find().populate({ path: "tripId", populate: "companyId vehicleId driverId" }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+        InvoiceModel.estimatedDocumentCount()
+    ]);
+    res.setHeader("X-Total-Count", String(total));
+    res.setHeader("X-Page", String(page));
     const payments = await PaymentModel.find({ direction: "Incoming", category: "Invoice Payment", status: { $ne: "Cancelled" } }).select("invoiceId allocations amount amountReceived").lean();
     const paidMap = payments.reduce((map, payment) => {
         if (payment.allocations?.length) {

@@ -24,6 +24,9 @@ export type TripPayload = {
   deliveryDate?: string;
   status?: string;
   expenses?: TripExpensePayload[];
+  consignors?: Array<{ companyId?: string; name: string; address?: string; gstNumber?: string; contactNumber?: string }>;
+  consignees?: Array<{ companyId?: string; name: string; address?: string; gstNumber?: string; contactNumber?: string }>;
+  destinations?: Array<{ consignorId?: string; consigneeId?: string; loadingLocation: string; unloadingLocation: string; material: string; weightMt: number; ratePerMt: number; freightAmount: number; payeeId?: string }>;
 };
 
 export const listTrips = (token?: string) => apiRequest<Trip[]>("/api/trips", { token });

@@ -80,7 +80,18 @@ export interface Trip {
   status: string;
   totalExpense: number;
   profit: number;
+  consignors?: TripParty[];
+  consignees?: TripParty[];
+  destinations?: TripDestination[];
+  notificationSentAt?: string;
+  loadingStartedAt?: string;
+  transitStartedAt?: string;
+  unloadingStartedAt?: string;
+  deliveredAt?: string;
 }
+
+export interface TripParty { companyId?: string; name: string; address?: string; gstNumber?: string; contactNumber?: string }
+export interface TripDestination { id?: string; consignorId?: string; consigneeId?: string; loadingLocation: string; unloadingLocation: string; material: string; weightMt: number; ratePerMt: number; freightAmount: number; payeeId?: string }
 
 export interface BiltyFile {
   id: string;

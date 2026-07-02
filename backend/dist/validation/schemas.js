@@ -83,6 +83,13 @@ export const tripSchema = z.object({
         freightAmount: z.number().min(0),
         loadingDate: z.coerce.date(),
         deliveryDate: z.coerce.date().optional(),
+        consignors: z.array(z.object({ companyId: z.string().optional(), name: z.string().min(1), address: z.string().optional(), gstNumber: z.string().optional(), contactNumber: z.string().optional() })).optional(),
+        consignees: z.array(z.object({ companyId: z.string().optional(), name: z.string().min(1), address: z.string().optional(), gstNumber: z.string().optional(), contactNumber: z.string().optional() })).optional(),
+        destinations: z.array(z.object({
+            consignorId: z.string().optional(), consigneeId: z.string().optional(),
+            loadingLocation: z.string().min(1), unloadingLocation: z.string().min(1), material: z.string().min(1),
+            weightMt: z.number().min(0), ratePerMt: z.number().min(0), freightAmount: z.number().min(0), payeeId: z.string().optional()
+        })).optional(),
         status: z.enum(["Draft", "Trip Created", "Assigned", "Vehicle Assigned", "Loading", "Loading Started", "Loaded", "In Transit", "Reached Destination", "Unloading Started", "Delivered", "Invoice Generated", "Payment Received", "Completed", "Cancelled"]).optional(),
         expenses: z.array(z.object({
             type: z.string(),
